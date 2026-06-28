@@ -39,7 +39,7 @@ const (
 
 var (
     razorpayURLs = []string{
-        "https://pages.razorpay.com/Gift2DS",
+        "https://pages.razorpay.com/pl_C0rYjVEXmkqYVC/view",
     }
     urlIndex   uint64
     proxyIndex uint64
