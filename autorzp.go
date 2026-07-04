@@ -39,7 +39,7 @@ const (
 
 var (
     razorpayURLs = []string{
-        "https://pages.razorpay.com/tcspay",
+        "https://pages.razorpay.com/eventpay",
         
     }
     urlIndex   uint64
