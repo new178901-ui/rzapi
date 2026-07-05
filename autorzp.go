@@ -39,7 +39,7 @@ const (
 
 var (
     razorpayURLs = []string{
-        "https://pages.razorpay.com/paypage",
+        "https://pages.razorpay.com/renewnow",
         
         
         
