@@ -39,7 +39,7 @@ const (
 
 var (
     razorpayURLs = []string{
-        "https://pages.razorpay.com/accenture",
+        "https://pages.razorpay.com/payment-form",
         
         
         
