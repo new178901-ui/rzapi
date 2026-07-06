@@ -39,12 +39,8 @@ const (
 
 var (
     razorpayURLs = []string{
-        "https://pages.razorpay.com/eventpay",
-        "https://pages.razorpay.com/accenture",
-        "https://pages.razorpay.com/payment-form",
-        "https://pages.razorpay.com/tcspay",
         "https://pages.razorpay.com/bookpay",
-        "https://pages.razorpay.com/paypage",
+        
         
         
         
