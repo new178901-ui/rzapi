@@ -40,7 +40,7 @@ const (
 var (
     razorpayURLs = []string{
         
-        "https://pages.razorpay.com/kd-live",
+        "https://pages.razorpay.com/phpaynow",
         
         
         
