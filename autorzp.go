@@ -39,11 +39,9 @@ const (
 
 var (
     razorpayURLs = []string{
-        "https://pages.razorpay.com/pl_RnMAGGVjhNTyrV/view",
-        "https://pages.razorpay.com/phpaynow",
-        "https://pages.razorpay.com/pl_FohfBT5KXjeWPk/view",
-        "https://pages.razorpay.com/devotionalpointpayment",
         "https://pages.razorpay.com/naturallifestyle",
+        "https://pages.razorpay.com/phpaynow",
+        "https://pages.razorpay.com/indiumlaw",
         
         
         
