@@ -39,9 +39,7 @@ const (
 
 var (
     razorpayURLs = []string{
-        "https://pages.razorpay.com/thesisacewriters",
-        "https://pages.razorpay.com/bmseason4",
-        "https://pages.razorpay.com/pl_FyEiA47F7Hvt2l/view",
+        "https://pages.razorpay.com/naturallifestyle",
         
         
         
