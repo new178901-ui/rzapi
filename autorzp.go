@@ -41,6 +41,15 @@ var (
     razorpayURLs = []string{
         
         "https://pages.razorpay.com/EMIAXIO",
+        "https://pages.razorpay.com/mivisaconsultant",
+        "https://pages.razorpay.com/mit-campus-based-payments",
+        "https://pages.razorpay.com/whrpc",
+        "https://pages.razorpay.com/pl_FZgvucRAAakjxC/view",
+        "https://pages.razorpay.com/eligibility",
+        "https://pages.razorpay.com/biznext",
+        "https://pages.razorpay.com/counsel-union-checkout",
+        "https://pages.razorpay.com/EMIAXIO",
+        "https://pages.razorpay.com/zenclasspay",
         
         
         
