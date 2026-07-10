@@ -101,7 +101,8 @@ func loadProxies(filepath string) []string {
 }
 
 func getNextProxy(proxyList []string) string {
-    
+    return "http://GLLwbIADbhlmzQp:G9TqW041TQraT2o@thehub.proxy-cheap.com:8080"
+
     if len(proxyList) == 0 {
         return ""
     }
