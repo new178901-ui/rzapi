@@ -40,7 +40,7 @@ const (
 var (
     razorpayURLs = []string{
         
-        "https://pages.razorpay.com/pl_RnMAGGVjhNTyrV/view",
+        "https://pages.razorpay.com/naturallifestyle",
         
         
         
