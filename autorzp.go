@@ -40,7 +40,7 @@ const (
 var (
     razorpayURLs = []string{
         
-        "https://pages.razorpay.com/whrpc",
+        "https://pages.razorpay.com/zenclasspay",
         
         
         
