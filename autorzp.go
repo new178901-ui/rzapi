@@ -40,7 +40,7 @@ const (
 var (
     razorpayURLs = []string{
         
-        "https://pages.razorpay.com/mivisaconsultant",
+        "https://pages.razorpay.com/mit-campus-based-payments",
         
         
         
