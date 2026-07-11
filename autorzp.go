@@ -50,6 +50,9 @@ var (
         "https://pages.razorpay.com/counsel-union-checkout",
         "https://pages.razorpay.com/EMIAXIO",
         "https://pages.razorpay.com/zenclasspay",
+        "https://pages.razorpay.com/phpaynow",
+        "https://pages.razorpay.com/indiumlaw",
+        "https://pages.razorpay.com/pl_FohfBT5KXjeWPk/view",
         
         
         
