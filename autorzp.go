@@ -39,15 +39,14 @@ const (
 
 var (
     razorpayURLs = []string{
-        
-        "https://pages.razorpay.com/pl_EDnRhCLBbndGg4/view",
-        "https://pages.razorpay.com/pl_F41KwdgRN3Rgus/view",
-        "https://pages.razorpay.com/sabera",
-        "https://pages.razorpay.com/pl_Exi71Ap1kEOrsW/view",
+            "https://pages.razorpay.com/sabera",
         "https://pages.razorpay.com/pl_NfrG1qOGaFYl5V/view",
+        "https://pages.razorpay.com/pl_Exi71Ap1kEOrsW/view",
+        "https://pages.razorpay.com/pl_F41KwdgRN3Rgus/view",
+        "https://pages.razorpay.com/pl_EDnRhCLBbndGg4/view",
+        "https://pages.razorpay.com/pl_DljBccau7PNqCU/view",
         
-        
-        
+           
         
         
         
@@ -107,6 +106,7 @@ func loadProxies(filepath string) []string {
 func getNextProxy(proxyList []string) string {
     return ""
 
+    
     if len(proxyList) == 0 {
         return ""
     }
