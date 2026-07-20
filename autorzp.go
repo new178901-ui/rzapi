@@ -39,11 +39,8 @@ const (
 
 var (
     razorpayURLs = []string{
-           "https://pages.razorpay.com/pl_NfrG1qOGaFYl5V/view",
-           "https://pages.razorpay.com/EMIAXIO",
-           "https://pages.razorpay.com/sdps-fees",
-           "https://pages.razorpay.com/vervelogic",
-           "https://pages.razorpay.com/travelosei-payment",
+           "https://pages.razorpay.com/pl_GPHQaTYfWlqoQZ/view",
+        
         
         
         
