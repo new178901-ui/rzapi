@@ -39,7 +39,7 @@ const (
 
 var (
     razorpayURLs = []string{
-        "https://pages.razorpay.com/pl_DezuE9DO09Ch0T/view",
+        "https://pages.razorpay.com/ihrccc-donate",
         
           
         
