@@ -107,7 +107,7 @@ func getNextURL() string {
 func formatProxy(raw string) string {
     raw = strings.TrimSpace(raw)
     if raw == "" {
-        return "http://proxy.flameproxies.com:8989:flm06e96f1a-package-premium:40b70747"
+        return ""
     }
     if strings.Contains(raw, "://") {
         return raw
