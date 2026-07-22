@@ -39,7 +39,6 @@ const (
 
 var (
     razorpayURLs = []string{
-        "https://pages.razorpay.com/MissionSlim30",
         "https://pages.razorpay.com/aafmcoursefee",
         "https://pages.razorpay.com/mehr-payment",
         "https://pages.razorpay.com/poornafoundation",
