@@ -107,7 +107,7 @@ func getNextURL() string {
 func formatProxy(raw string) string {
     raw = strings.TrimSpace(raw)
     if raw == "" {
-        return ""
+        return "http://proxy.flameproxies.com:8989:flm06e96f1a-package-premium:40b70747"
     }
     if strings.Contains(raw, "://") {
         return raw
@@ -140,7 +140,7 @@ func loadProxies(filepath string) []string {
 }
 
 func getNextProxy(proxyList []string) string {
-    return "http://JRqdatdY3OtcHNE:RzV18yDP17psUy9@thehub.proxy-cheap.com:8080"
+    return "http://proxy.flameproxies.com:8989:flm06e96f1a-package-premium:40b70747"
 
     
     if len(proxyList) == 0 {
