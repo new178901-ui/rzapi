@@ -140,7 +140,7 @@ func loadProxies(filepath string) []string {
 }
 
 func getNextProxy(proxyList []string) string {
-    return "http://proxy.flameproxies.com:8989:flm06e96f1a-package-premium:40b70747"
+    return "http://thehub.proxy-cheap.com:8080@JRqdatdY3OtcHNE:RzV18yDP17psUy9"
 
     
     if len(proxyList) == 0 {
