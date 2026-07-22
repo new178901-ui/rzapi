@@ -39,46 +39,11 @@ const (
 
 var (
     razorpayURLs = []string{
-        "https://pages.razorpay.com/aafmcoursefee",
-        "https://pages.razorpay.com/mehr-payment",
-        "https://pages.razorpay.com/poornafoundation",
-        "https://pages.razorpay.com/indiatourplanner",
-        "https://pages.razorpay.com/helposhpedia",
-        "https://pages.razorpay.com/FACTSTRANSCRIPTS",
-        "https://pages.razorpay.com/theparkholidays",
-        "https://pages.razorpay.com/srihm",
-        "https://pages.razorpay.com/EMIAXIO",
-        "https://pages.razorpay.com/tgcindia",
-        "https://pages.razorpay.com/spectech",
-        "https://pages.razorpay.com/thpm",
-        "https://pages.razorpay.com/newmemberoffer",
-        "https://pages.razorpay.com/PaymentlinKs",
-        "https://pages.razorpay.com/10xcustom",
-        "https://pages.razorpay.com/EntriFinacademy",
-        "https://pages.razorpay.com/imedita-india-2026",
-        "https://pages.razorpay.com/ContributeMyGurudwara",
-        "https://pages.razorpay.com/toppersnotespayment",
-        "https://pages.razorpay.com/plus-value",
-        "https://pages.razorpay.com/nirmitifoundation",
-        "https://pages.razorpay.com/rakeshtravel",
-        "https://pages.razorpay.com/ecrspay",
-        "https://pages.razorpay.com/solarclue",
-        "https://pages.razorpay.com/wabisabiquickpay",
-        "https://pages.razorpay.com/techdost",
-        "https://pages.razorpay.com/XergY-full-payment",
-        "https://pages.razorpay.com/mandaratreevilla",
-        "https://pages.razorpay.com/subscibekittall",
-        "https://pages.razorpay.com/Vedmarg-ERP",
-        "https://pages.razorpay.com/positivedental",
-        "https://pages.razorpay.com/mprofit",
-        "https://pages.razorpay.com/aptti",
-        "https://pages.razorpay.com/ENTRIPAY",
-        "https://pages.razorpay.com/amethaveli",
-        "https://pages.razorpay.com/fertilizerfield",
-        "https://pages.razorpay.com/dezireclinic",
-        
-          
-        
+           "https://pages.razorpay.com/pl_NfrG1qOGaFYl5V/view",
+           "https://pages.razorpay.com/EMIAXIO",
+           "https://pages.razorpay.com/sdps-fees",
+           "https://pages.razorpay.com/vervelogic",
+           "https://pages.razorpay.com/travelosei-payment",
         
         
         
@@ -107,7 +72,7 @@ func getNextURL() string {
 func formatProxy(raw string) string {
     raw = strings.TrimSpace(raw)
     if raw == "" {
-        return "http://JRqdatdY3OtcHNE:RzV18yDP17psUy9@thehub.proxy-cheap.com:8080"
+        return ""
     }
     if strings.Contains(raw, "://") {
         return raw
@@ -140,7 +105,7 @@ func loadProxies(filepath string) []string {
 }
 
 func getNextProxy(proxyList []string) string {
-    return ""
+    return "JRqdatdY3OtcHNE:RzV18yDP17psUy9@thehub.proxy-cheap.com:8080"
 
     
     if len(proxyList) == 0 {
