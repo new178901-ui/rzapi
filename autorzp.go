@@ -1,6 +1,3 @@
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
 
 package main
 
@@ -27,9 +24,7 @@ import (
     "time"
 )
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
+
 
 const (
     BUILD    = "9cb57fdf457e44eac4384e182f925070ff5488d9"
@@ -39,7 +34,7 @@ const (
 
 var (
     razorpayURLs = []string{
-           "https://pages.razorpay.com/PaymentlinKs",
+           "https://pages.razorpay.com/imedita-india-2026",
 
         
         
