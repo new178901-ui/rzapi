@@ -101,7 +101,7 @@ func loadProxies(filepath string) []string {
 }
 
 func getNextProxy(proxyList []string) string {
-    return "https://proxy.flameproxies.com:8989:flm06e96f1a-package-premium:40b70747"
+    return "http://flm06e96f1a-package-premium-pool-2:40b70747@proxy.flameproxies.com:8989"
 
     
     if len(proxyList) == 0 {
