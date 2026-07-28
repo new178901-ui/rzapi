@@ -34,7 +34,7 @@ const (
 
 var (
     razorpayURLs = []string{
-           "https://pages.razorpay.com/XergY-full-payment",
+           "https://pages.razorpay.com/wabisabiquickpay",
 
         
         
