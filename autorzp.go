@@ -34,7 +34,7 @@ const (
 
 var (
     razorpayURLs = []string{
-           "https://pages.razorpay.com/imedita-india-2026",
+           "https://pages.razorpay.com/toppersnotespayment",
 
         
         
