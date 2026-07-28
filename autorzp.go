@@ -34,7 +34,7 @@ const (
 
 var (
     razorpayURLs = []string{
-           "https://pages.razorpay.com/10xcustom",
+           "https://pages.razorpay.com/techdost",
 
         
         
