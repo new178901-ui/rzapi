@@ -39,7 +39,7 @@ const (
 
 var (
     razorpayURLs = []string{
-           "https://pages.razorpay.com/theparkholidays",
+           "https://pages.razorpay.com/EMIAXIO",
 
         
         
