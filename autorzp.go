@@ -34,7 +34,7 @@ const (
 
 var (
     razorpayURLs = []string{
-           "https://pages.razorpay.com/toppersnotespayment",
+           "https://pages.razorpay.com/nirmitifoundation",
 
         
         
