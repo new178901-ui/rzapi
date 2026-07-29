@@ -99,7 +99,7 @@ func loadProxies(filepath string) []string {
 }
 
 func getNextProxy(proxyList []string) string {
-    return "http://purevpn0s551451:9dpdlc2nfxgj@px022507.pointtoserver.com:10780"
+    return ""
 
     
     if len(proxyList) == 0 {
