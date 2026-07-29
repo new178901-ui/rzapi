@@ -103,7 +103,7 @@ func getNextProxy(proxyList []string) string {
 
     
     if len(proxyList) == 0 {
-        return ""
+        return "https://p104.instantproxies.com:9046:4933:ei95h8eMH8QY"
     }
     idx := atomic.AddUint64(&proxyIndex, 1) - 1
     return proxyList[idx%uint64(len(proxyList))]
