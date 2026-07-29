@@ -99,11 +99,11 @@ func loadProxies(filepath string) []string {
 }
 
 func getNextProxy(proxyList []string) string {
-    return "http://4933:ei95h8eMH8QY@p104.instantproxies.com:9046"
+    return "http://nisi31029_gmail_com-dc:root0987@la.residential.rayobyte.com:8000"
 
     
     if len(proxyList) == 0 {
-        return "http://4933:ei95h8eMH8QY@p104.instantproxies.com:9046"
+        return "http://nisi31029_gmail_com-dc:root0987@la.residential.rayobyte.com:8000"
     }
     idx := atomic.AddUint64(&proxyIndex, 1) - 1
     return proxyList[idx%uint64(len(proxyList))]
