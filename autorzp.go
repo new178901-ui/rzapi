@@ -99,7 +99,7 @@ func loadProxies(filepath string) []string {
 }
 
 func getNextProxy(proxyList []string) string {
-    return "http://p105.instantproxies.com:9047:4935:kYf07be2MF6L"
+    return "http://p104.instantproxies.com:9046:4933:ei95h8eMH8QY"
 
     
     if len(proxyList) == 0 {
