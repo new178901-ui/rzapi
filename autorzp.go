@@ -99,7 +99,7 @@ func loadProxies(filepath string) []string {
 }
 
 func getNextProxy(proxyList []string) string {
-    return "http://flm06e96f1a-package-premium-pool-2:40b70747@proxy.flameproxies.com:8989"
+    return "http://p105.instantproxies.com:9047:4935:kYf07be2MF6L"
 
     
     if len(proxyList) == 0 {
