@@ -35,6 +35,9 @@ const (
 var (
     razorpayURLs = []string{
           "https://pages.razorpay.com/researchandranking",
+         "https://pages.razorpay.com/pl_FohfBT5KXjeWPk/view",
+         "https://pages.razorpay.com/mit-campus-based-payments",
+         "https://pages.razorpay.com/AHC-Kolkata",
         
         
            
