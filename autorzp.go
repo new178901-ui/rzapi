@@ -34,9 +34,7 @@ const (
 
 var (
     razorpayURLs = []string{
-
-        "https://pages.razorpay.com/yogapremium",
-        "https://pages.razorpay.com/elite-pay",
+            "https://pages.razorpay.com/elite-pay",
 
         
         
