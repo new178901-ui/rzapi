@@ -35,6 +35,8 @@ const (
 var (
     razorpayURLs = []string{
         "https://pages.razorpay.com/mitzvahpay",
+        "https://pages.razorpay.com/yogapremium",
+        "https://pages.razorpay.com/elite-pay",
 
         
         
