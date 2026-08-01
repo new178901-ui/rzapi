@@ -34,7 +34,7 @@ const (
 
 var (
     razorpayURLs = []string{
-        "https://pages.razorpay.com/instantpayment",
+        "https://pages.razorpay.com/quickpayment",
 
         
         
