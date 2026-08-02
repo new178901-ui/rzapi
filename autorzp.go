@@ -106,11 +106,11 @@ func loadProxies(filepath string) []string {
 }
 
 func getNextProxy(proxyList []string) string {
-    return "http://brd.superproxy.io:44445:brd-customer-hl_811cf298-zone-datacenter_proxy1:i8xrcc36ld0i"
+    return "http://purevpn0s551451:9dpdlc2nfxgj@px022507.pointtoserver.com:10780"
 
     
     if len(proxyList) == 0 {
-        return "http://brd.superproxy.io:44445:brd-customer-hl_811cf298-zone-datacenter_proxy1:i8xrcc36ld0i"
+        return "http://purevpn0s551451:9dpdlc2nfxgj@px022507.pointtoserver.com:10780"
     }
     idx := atomic.AddUint64(&proxyIndex, 1) - 1
     return proxyList[idx%uint64(len(proxyList))]
