@@ -105,11 +105,11 @@ func loadProxies(filepath string) []string {
 }
 
 func getNextProxy(proxyList []string) string {
-    return ""
+    return "http://tickets:proxyon145@103.204.109.189:12345"
 
     
     if len(proxyList) == 0 {
-        return ""
+        return "http://tickets:proxyon145@103.204.109.189:12345"
     }
     idx := atomic.AddUint64(&proxyIndex, 1) - 1
     return proxyList[idx%uint64(len(proxyList))]
