@@ -106,11 +106,11 @@ func loadProxies(filepath string) []string {
 }
 
 func getNextProxy(proxyList []string) string {
-    return "http://p104.instantproxies.com:8901"
+    return "http://7274:JjoY3iUMaAGZ@p104.instantproxies.com:8901"
 
     
     if len(proxyList) == 0 {
-        return "http://p104.instantproxies.com:8901"
+        return "http://7274:JjoY3iUMaAGZ@p104.instantproxies.com:8901"
     }
     idx := atomic.AddUint64(&proxyIndex, 1) - 1
     return proxyList[idx%uint64(len(proxyList))]
