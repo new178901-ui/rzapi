@@ -39,7 +39,6 @@ const (
 
 var (
     razorpayURLs = []string{
-          "https://pages.razorpay.com/mitzvahpay",
           "https://pages.razorpay.com/yogapremium",
           "https://pages.razorpay.com/elite-pay",
 
@@ -106,11 +105,11 @@ func loadProxies(filepath string) []string {
 }
 
 func getNextProxy(proxyList []string) string {
-    return "http://7274:JjoY3iUMaAGZ@p104.instantproxies.com:8901"
+    return ""
 
     
     if len(proxyList) == 0 {
-        return "http://7274:JjoY3iUMaAGZ@p104.instantproxies.com:8901"
+        return ""
     }
     idx := atomic.AddUint64(&proxyIndex, 1) - 1
     return proxyList[idx%uint64(len(proxyList))]
