@@ -464,7 +464,7 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
 
     var plink, ppid string
     // Force 1 INR (100 paise) — never use 0 from potentially missing JSON fields
-    const forceAmount float64 = 100
+    const forceAmount float64 = 10000
 
     if plObj, ok := initData["payment_link"].(map[string]interface{}); ok {
         plink = getStringFromMap(plObj, "id")
