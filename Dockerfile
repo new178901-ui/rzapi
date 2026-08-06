@@ -1,23 +1,30 @@
+# Dockerfile
 FROM golang:1.21-alpine AS builder
 
 WORKDIR /app
 
-COPY go.mod ./
+# Copy go mod files first
+COPY go.mod go.sum* ./
+
+# Download dependencies
 RUN go mod download
 
+# Copy source code
 COPY *.go ./
 
+# Build the application
 RUN go build -o razorpay .
 
+# Final stage
 FROM alpine:latest
 
 WORKDIR /app
 
+# Copy the binary from builder
 COPY --from=builder /app/razorpay .
 
-# Create empty proxy file (you need to add proxies)
-RUN touch px.txt
+# Expose port
+EXPOSE 7070
 
-EXPOSE 8080
-
+# Run the application
 CMD ["./razorpay"]
