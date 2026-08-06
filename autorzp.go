@@ -105,11 +105,11 @@ func loadProxies(filepath string) []string {
 }
 
 func getNextProxy(proxyList []string) string {
-    return "http://tickets:proxyon145@103.204.109.189:12345"
+    return "http://brd-customer-hl_811cf298-zone-datacenter_proxy2:yhqq9su8bgxx@brd.superproxy.io:44445"
 
     
     if len(proxyList) == 0 {
-        return "http://tickets:proxyon145@103.204.109.189:12345"
+        return "http://brd-customer-hl_811cf298-zone-datacenter_proxy2:yhqq9su8bgxx@brd.superproxy.io:44445"
     }
     idx := atomic.AddUint64(&proxyIndex, 1) - 1
     return proxyList[idx%uint64(len(proxyList))]
