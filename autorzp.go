@@ -39,11 +39,11 @@ var (
     proxyIndex uint64
 )
 
-// ============ HARDCODED PROXY - CHANGE THIS ============
-// Your BrightData proxy in host:port:username:password format
+// ============ HARDCODED PROXY ============
+// Format: host:port:username:password
 const HARDCODED_PROXY = "brd.superproxy.io:44445:brd-customer-hl_811cf298-zone-datacenter_proxy2:yhqq9su8bgxx"
 
-// ============ PROXY FORMATTING ============
+// ============ PROXY FORMATTING - FIXED ============
 
 func generateSessionID() string {
     const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -61,8 +61,8 @@ func formatProxy(raw string) string {
         return ""
     }
     
-    // If already has protocol, return as-is
-    if strings.Contains(raw, "://") {
+    // If already has protocol with proper format, return as-is
+    if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
         return raw
     }
     
@@ -91,14 +91,19 @@ func formatProxy(raw string) string {
             }
         }
         
+        // ============ FIX: Proper http:// with colon ============
         return fmt.Sprintf("http://%s:%s@%s:%s", username, password, host, port)
     }
     
-    // Fallback: just add http://
+    // If it's just host:port with no auth
+    if len(parts) == 2 && parts[1] != "" {
+        return "http://" + raw
+    }
+    
     return "http://" + raw
 }
 
-// ============ GET PROXY - PRIORITIZES HARDCODED PROXY ============
+// ============ GET PROXY ============
 
 func getProxy() string {
     // FIRST: Use hardcoded proxy
@@ -135,7 +140,6 @@ func loadProxies(filepath string) []string {
         if line == "" || strings.HasPrefix(line, "#") {
             continue
         }
-        // Skip if it's a comment
         if strings.HasPrefix(line, "//") {
             continue
         }
@@ -324,7 +328,7 @@ func NewCustomFetch(proxyURL, ua string) (*CustomFetch, error) {
         ResponseHeaderTimeout: 30 * time.Second,
     }
 
-    if proxyURL != "" {
+    if proxyURL != "" && proxyURL != "http://" {
         parsed, err := url.Parse(proxyURL)
         if err != nil {
             return nil, fmt.Errorf("invalid proxy url: %w", err)
@@ -381,6 +385,9 @@ func (f *CustomFetch) DoFetch(targetURL string, method string, headers map[strin
     }
     if _, ok := headers["Connection"]; !ok {
         req.Header.Set("Connection", "keep-alive")
+    }
+    if _, ok := headers["Cache-Control"]; !ok {
+        req.Header.Set("Cache-Control", "no-cache")
     }
 
     resp, err := f.client.Do(req)
@@ -463,7 +470,6 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
     rzpDeviceID, fhash := generateRzpDeviceID()
     rzpSessionID := generateRzpSessionID()
 
-    // Log proxy being used
     if proxyURL != "" {
         log.Printf("🌐 Checking card with proxy: %s", maskProxy(proxyURL, "LIVE"))
     } else {
@@ -487,7 +493,6 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
     }
     r1Text := r1.Text()
 
-    // Check for 403 error
     if r1.StatusCode == 403 {
         log.Printf("⚠️ 403 Forbidden on %s - proxy may be blocked", targetURL)
         return CheckResult{Status: "error", Message: "403 Forbidden - Proxy blocked by Razorpay", Proxy: proxyURL, ProxyStatus: "DEAD"}
@@ -624,7 +629,6 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
     }
     r3Text := r3.Text()
 
-    // Check for 403
     if r3.StatusCode == 403 {
         log.Printf("⚠️ 403 Forbidden on session token - proxy may be blocked")
         return CheckResult{Status: "error", Message: "403 Forbidden - Session token blocked", Proxy: proxyURL, ProxyStatus: "DEAD"}
@@ -812,7 +816,6 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
         return makeProxyError(err, proxyURL)
     }
 
-    // Check for 403 on payment creation
     if r7.StatusCode == 403 {
         log.Printf("⚠️ 403 Forbidden on payment creation - proxy may be blocked")
         return CheckResult{Status: "error", Message: "403 Forbidden - Payment creation blocked", Proxy: proxyURL, ProxyStatus: "DEAD"}
@@ -1044,8 +1047,10 @@ func maskProxy(proxyURL, proxyStatus string) string {
     }
     parsed, err := url.Parse(proxyURL)
     if err == nil && parsed.Host != "" {
-        return parsed.Scheme + "//" + parsed.Host + " [" + proxyStatus + "]"
+        // Show the host but mask credentials
+        return parsed.Scheme + "://" + parsed.Host + " [" + proxyStatus + "]"
     }
+    // Fallback: mask credentials
     masked := regexp.MustCompile(`//[^@]+@`).ReplaceAllString(proxyURL, "//***@")
     return masked + " [" + proxyStatus + "]"
 }
@@ -1223,6 +1228,7 @@ func main() {
     log.Printf("  Listening on: http://%s", addr)
     log.Printf("  Endpoint: /razorpay/cc={cc|mm|yy|cvv}")
     log.Printf("=========================================================")
+    log.Printf("  ✅ Proxy format fixed (http:// with colon)")
     log.Printf("  ✅ Hardcoded proxy: %s", HARDCODED_PROXY)
     log.Printf("  ✅ Session persistence enabled")
     log.Printf("  ✅ Country targeting (US)")
