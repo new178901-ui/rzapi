@@ -39,9 +39,10 @@ var (
     proxyIndex uint64
 )
 
-// ============ HARDCODED PROXY ============
+// ============ BRIGHTDATA PROXY CONFIG ============
 // Format: host:port:username:password
-const HARDCODED_PROXY = "brd.superproxy.io:44445:brd-customer-hl_811cf298-zone-datacenter_proxy2:yhqq9su8bgxx"
+// Add -const and -dns-local for better stability
+const HARDCODED_PROXY = "brd.superproxy.io:44445:brd-customer-hl_811cf298-zone-datacenter_proxy2-const-dns-local:yhqq9su8bgxx"
 
 // ============ PROXY FORMATTING - FIXED ============
 
@@ -75,7 +76,7 @@ func formatProxy(raw string) string {
         username := strings.Join(parts[2:len(parts)-1], ":")
         password := parts[len(parts)-1]
         
-        // Check if this is BrightData and needs session
+        // Check if this is BrightData
         if strings.Contains(username, "brd-customer") && strings.Contains(username, "zone-") {
             // Generate unique session ID for this request
             sessionID := generateSessionID()
@@ -85,13 +86,22 @@ func formatProxy(raw string) string {
                 username = username + "-session-" + sessionID
             }
             
-            // Add country targeting for better success rate (US)
+            // Add country targeting if not present
             if !strings.Contains(username, "-country-") {
                 username = username + "-country-us"
             }
+            
+            // Add const for peer binding
+            if !strings.Contains(username, "-const") {
+                username = username + "-const"
+            }
+            
+            // Add DNS local
+            if !strings.Contains(username, "-dns-local") {
+                username = username + "-dns-local"
+            }
         }
         
-        // ============ FIX: Proper http:// with colon ============
         return fmt.Sprintf("http://%s:%s@%s:%s", username, password, host, port)
     }
     
@@ -356,101 +366,6 @@ func NewCustomFetch(proxyURL, ua string) (*CustomFetch, error) {
     }
 
     return &CustomFetch{client: client, ua: ua}, nil
-}
-
-func (f *CustomFetch) DoFetch(targetURL string, method string, headers map[string]string, body io.Reader) (*FetchResponse, error) {
-    var reqBody io.Reader = body
-    if reqBody == nil && method == "POST" {
-        reqBody = strings.NewReader("")
-    }
-
-    req, err := http.NewRequest(method, targetURL, reqBody)
-    if err != nil {
-        return nil, err
-    }
-
-    if _, ok := headers["User-Agent"]; !ok {
-        req.Header.Set("User-Agent", f.ua)
-    }
-    for k, v := range headers {
-        req.Header.Set(k, v)
-    }
-
-    // Add common headers to avoid detection
-    if _, ok := headers["Accept-Language"]; !ok {
-        req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-    }
-    if _, ok := headers["Accept-Encoding"]; !ok {
-        req.Header.Set("Accept-Encoding", "gzip, deflate, br")
-    }
-    if _, ok := headers["Connection"]; !ok {
-        req.Header.Set("Connection", "keep-alive")
-    }
-    if _, ok := headers["Cache-Control"]; !ok {
-        req.Header.Set("Cache-Control", "no-cache")
-    }
-
-    resp, err := f.client.Do(req)
-    if err != nil {
-        return nil, err
-    }
-    defer resp.Body.Close()
-
-    respBody, err := io.ReadAll(resp.Body)
-    if err != nil {
-        return nil, err
-    }
-
-    return &FetchResponse{
-        Body:       string(respBody),
-        StatusCode: resp.StatusCode,
-        Headers:    resp.Header,
-    }, nil
-}
-
-func (f *CustomFetch) Get(targetURL string, headers map[string]string) (*FetchResponse, error) {
-    return f.DoFetch(targetURL, "GET", headers, nil)
-}
-
-func (f *CustomFetch) PostJSON(targetURL string, headers map[string]string, payload interface{}) (*FetchResponse, error) {
-    jsonBytes, err := json.Marshal(payload)
-    if err != nil {
-        return nil, err
-    }
-    if headers == nil {
-        headers = make(map[string]string)
-    }
-    if _, ok := headers["Content-Type"]; !ok {
-        if _, ok2 := headers["Content-type"]; !ok2 {
-            if _, ok3 := headers["content-type"]; !ok3 {
-                headers["Content-Type"] = "application/json"
-            }
-        }
-    }
-    return f.DoFetch(targetURL, "POST", headers, strings.NewReader(string(jsonBytes)))
-}
-
-func (f *CustomFetch) PostForm(targetURL string, headers map[string]string, formData url.Values) (*FetchResponse, error) {
-    if headers == nil {
-        headers = make(map[string]string)
-    }
-    if _, ok := headers["Content-Type"]; !ok {
-        if _, ok2 := headers["Content-type"]; !ok2 {
-            if _, ok3 := headers["content-type"]; !ok3 {
-                headers["Content-Type"] = "application/x-www-form-urlencoded"
-            }
-        }
-    }
-    return f.DoFetch(targetURL, "POST", headers, strings.NewReader(formData.Encode()))
-}
-
-// ============ CHECK RESULT ============
-
-type CheckResult struct {
-    Status      string `json:"status"`
-    Message     string `json:"response"`
-    Proxy       string `json:"proxy"`
-    ProxyStatus string `json:"proxy_status"`
 }
 
 // ============ CARD CHECKING LOGIC ============
@@ -1047,10 +962,8 @@ func maskProxy(proxyURL, proxyStatus string) string {
     }
     parsed, err := url.Parse(proxyURL)
     if err == nil && parsed.Host != "" {
-        // Show the host but mask credentials
         return parsed.Scheme + "://" + parsed.Host + " [" + proxyStatus + "]"
     }
-    // Fallback: mask credentials
     masked := regexp.MustCompile(`//[^@]+@`).ReplaceAllString(proxyURL, "//***@")
     return masked + " [" + proxyStatus + "]"
 }
@@ -1152,11 +1065,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
     var proxyURL string
     
     if proxyParam != "" {
-        // Use proxy from URL parameter
         proxyURL = formatProxy(proxyParam)
         log.Printf("📌 Using proxy from URL parameter: %s", maskProxy(proxyURL, "LIVE"))
     } else {
-        // Use hardcoded proxy
         proxyURL = getProxy()
     }
 
@@ -1188,7 +1099,6 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
     targetURL := getNextURL()
 
-    // Log what we're using
     if proxyURL != "" {
         log.Printf("🌐 Processing card with proxy: %s", maskProxy(proxyURL, "LIVE"))
     } else {
@@ -1228,8 +1138,7 @@ func main() {
     log.Printf("  Listening on: http://%s", addr)
     log.Printf("  Endpoint: /razorpay/cc={cc|mm|yy|cvv}")
     log.Printf("=========================================================")
-    log.Printf("  ✅ Proxy format fixed (http:// with colon)")
-    log.Printf("  ✅ Hardcoded proxy: %s", HARDCODED_PROXY)
+    log.Printf("  ✅ BrightData proxy with const + dns-local")
     log.Printf("  ✅ Session persistence enabled")
     log.Printf("  ✅ Country targeting (US)")
     log.Printf("  ✅ 403 error handling")
