@@ -1,1 +1,1 @@
-brd.superproxy.io:44445:brd-customer-hl_811cf298-zone-datacenter_proxy1:i8xrcc36ld0i
+brd.superproxy.io:44445:brd-customer-hl_811cf298-zone-datacenter_proxy2:yhqq9su8bgxx
