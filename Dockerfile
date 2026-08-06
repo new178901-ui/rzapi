@@ -1,12 +1,11 @@
-# Dockerfile
 FROM golang:1.21-alpine AS builder
 
 WORKDIR /app
 
-# Copy go mod files first
+# Copy go mod files
 COPY go.mod go.sum* ./
 
-# Download dependencies
+# Download dependencies (none for now)
 RUN go mod download
 
 # Copy source code
@@ -20,11 +19,8 @@ FROM alpine:latest
 
 WORKDIR /app
 
-# Copy the binary from builder
 COPY --from=builder /app/razorpay .
 
-# Expose port
 EXPOSE 7070
 
-# Run the application
 CMD ["./razorpay"]
